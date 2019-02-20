@@ -1,0 +1,46 @@
+{
+  "name": "keys-js",
+  "version": "2.1.0",
+  "description": "The Encrypted Environment Loader core client. Decrypt environment variable sets and load them into any process",
+  "homepage": "https://keys.cm/",
+  "bugs": {
+    "url": "https://github.com/keys-cm/keys/issues",
+    "email": "ehlo@keys.cm"
+  },
+  "repository": "github:keys-cm/keys",
+  "os": [
+    "!win32"
+  ],
+  "main": "keys.js",
+  "bin": {
+    "keys": "keys.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "GPL-3.0-only",
+  "private": false,
+  "node_deb": {
+    "executable_name": "keys",
+    "package_name": "keys",
+    "entrypoints": {
+      "cli": "keys.js",
+      "daemon": "keys.js --daemon"
+    }
+  },
+  "devDependencies": {
+    "eslint": "^5.8.0",
+    "jest": "^23.6.0"
+  },
+  "dependencies": {
+    "colors": "^1.3.3",
+    "cryptico": "^1.0.2",
+    "lodash": "^4.17.11",
+    "password-validator": "^4.1.1",
+    "promptly": "^3.0.3",
+    "request": "^2.88.0",
+    "request-promise": "^4.2.2",
+    "sha3": "^2.0.0",
+    "sjcl": "^1.0.8",
+    "uuid": "^3.3.2"
+  }
+}
