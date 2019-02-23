@@ -10,6 +10,7 @@ const promptly = require('promptly');
 const fs = require('fs');
 const _ = require('lodash');
 const colors = require('colors'); // eslint-disable-line no-unused-vars
+const exec_await = require('await-exec')
 
 const {
     exec,
@@ -19,7 +20,7 @@ const {
 let model = {
     debug: false,
     client: {
-        version: '2.3.4',
+        version: '2.1.0',
         endpoint: 'https://api.keys.cm'
     },
     args: [],
@@ -154,9 +155,14 @@ let host_info = async (model) => {
 
     model.client.type = 'default';
 
-    await exec('uname -a', function (err, stdout) {
-        model.client.uname = stdout;
-    });
+    let uname = await exec_await('uname -a');
+    let hash = new SHA3(512);
+    hash.update(uname.stdout);
+    model.client.uname_hash = hash.digest('hex');
+
+    hash = new SHA3(512);
+    hash.update(model.cmd);
+    model.client.cmd_hash = hash.digest('hex');
 
     // _.filter(process.env, ) look for heroku vars
 

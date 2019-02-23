@@ -3,9 +3,7 @@
 This is the keys core client, which can be installed with npm and provides the `keys` command line utility.
 
 [https://keys.cm](https://keys.cm) is a repository that stores encrypted blobs of environment variables. You can store
-variable sets for your software in the repository, and fetch-decrypt-load them at runtime. This prevents your sensitive
-environment variables like API access keys from ever having to sit in plain text files on your systems and developer
-machines.
+variable sets for your software in the repository, and fetch-decrypt-load them at runtime. This prevents your sensitive environment variables like API access keys from ever having to sit in plain text files on your systems and developer machines.
 
 The repository functions similarly to modern password managers, and keys.cm does not have access to your environment
 variables, they are decrypted locally after you fetch the blob. Don't lose your password!
@@ -29,7 +27,7 @@ command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.3.0
+keys 2.1.0
 Email: me@example.com
 Password: *********
 AuthSuccess
