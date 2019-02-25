@@ -216,39 +216,34 @@ let ask_env = async (model) => {
 
     if (model.token) {
         model.selected = _.findKey(model.org.envs, () => true);
+    } else if (model.env_name) {
+        model.selected = _.find(model.org.envs, {
+            name: model.env_name
+        });
+    }
+
+    if (model.selected) {
         info(`Loading environment: ${model.org.envs[model.selected].name}`);
         return Promise.resolve(model);
-    }
-
-    // if (_.has(model.settings, 'default_environment') && model.settings.default_environment) {
-
-    //     _.each(model.org.envs, (env) => {
-    //         if (env.id === model.settings.default_environment) {
-    //             info(`Loading default environment: ${env.name}`);
-    //             model.selected = env.id;
-    //         }
-    //     });
-    //     return Promise.resolve(model);
-    // } else {
-
-    let text = 'Choose the environment to load:\n';
-    let i = 1;
-    let options = {};
-    let envs = _.map(model.org.envs, (env) => {
-        return env;
-    });
-    _.each(envs, (env) => {
-        text += `[${i++}] ${env.name}\n`;
-    });
-    let env_index = await promptly.prompt(text, options);
-    if (env_index > 0 && envs.length >= env_index) {
-        model.selected = envs[env_index - 1].id;
-        model.settings.default_environment = model.selected;
-        return Promise.resolve(model);
     } else {
-        error('invalid index');
+        let text = 'Choose the environment to load:\n';
+        let i = 1;
+        let options = {};
+        let envs = _.map(model.org.envs, (env) => {
+            return env;
+        });
+        _.each(envs, (env) => {
+            text += `[${i++}] ${env.name}\n`;
+        });
+        let env_index = await promptly.prompt(text, options);
+        if (env_index > 0 && envs.length >= env_index) {
+            model.selected = envs[env_index - 1].id;
+            // model.settings.default_environment = model.selected;
+            return Promise.resolve(model);
+        } else {
+            error('invalid index');
+        }
     }
-    // }
 };
 
 let execute = (model) => {
@@ -389,13 +384,16 @@ let main = async () => {
     let items = _.drop(process.argv, 2);
     let start_cmd = false;
     let last_was_token = false
+    let last_was_env = false
     _.each(items, (item) => {
         if (!start_cmd) {
             if (_.startsWith(item, '-')) {
-                if ( (item === '-t' || item === '--token') && !process.env.KEYS_TOKEN) {
+                if ((item === '-t' || item === '--token') && !process.env.KEYS_TOKEN) {
                     last_was_token = true;
                 } else if (item === '-d' || item === '--debug') {
                     model.debug = true;
+                } else if (item === '-e' || item === '--environment') {
+                    last_was_env = true
                 } else if (item === '--clean') {
                     update_config(model);
                     info("Configuration in ~/.keys/settings.json reset");
@@ -405,6 +403,9 @@ let main = async () => {
             } else if (last_was_token) {
                 model.args.push(item);
                 last_was_token = false;
+            } else if (last_was_env) {
+                model.args.push(item);
+                last_was_env = false;
             } else {
                 start_cmd = true;
                 model.cmd.push(item);
@@ -447,7 +448,7 @@ let main = async () => {
         .then(specials)
         .then(execute)
         .catch((err) => {
-            console.error(err.message);
+            console.trace(err.message);
         });
 };
 
