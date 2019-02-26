@@ -1,7 +1,7 @@
 {
   "name": "keys-js",
   "version": "2.1.0",
-  "description": "The Encrypted Environment Loader core client. Decrypt environment variable sets and load them into any process",
+  "description": "The keys.cm cli. Decrypt environment variable sets and load them into any process",
   "homepage": "https://keys.cm/",
   "bugs": {
     "url": "https://github.com/intragalactic/keys/issues",

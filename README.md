@@ -50,6 +50,21 @@ $ keys gunicorn app:app
 $ keys bin/rails server -e production -p 4000
 ```
 
+### Options
+
+`-e | --environment environment-name`
+Specifies the environment to load, skipping the prompt which asks for it.
+
+`-t | --token`
+specifies that the KEYS_TOKEN variable in the local environment should be read for an access token for
+a specific environment. This will bypass normal username/password authentication.
+
+`-d | --debug`
+Enable debug mode, printing more messages.
+
+`--clean`
+Clear settings from ~/.keys/settings.json
+
 ### Access Tokens
 
 Sometimes you need to execute things non-interactively. Create an access token for a specific environment at
