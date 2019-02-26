@@ -17,7 +17,7 @@ You should have an account at [https://keys.cm](https://keys.cm) if you want to 
 Install the package with npm. This will provide a new command in your shell, called `keys`
 
 ```
-npm install -g keys-js
+npm install -g keys-cm
 ```
 
 ### Usage
@@ -27,7 +27,7 @@ command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.1.0
+keys 2.1.1
 Email: me@example.com
 Password: *********
 AuthSuccess
