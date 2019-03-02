@@ -59,8 +59,8 @@ Specifies the environment to load, skipping the prompt which asks for it.
 specifies that the KEYS_TOKEN variable in the local environment should be read for an access token for
 a specific environment. This will bypass normal username/password authentication.
 
-`-d | --debug`
-Enable debug mode, printing more messages.
+`-v | --verbose`
+Enable verbose mode, printing debugging messages about what is going on.
 
 `--clean`
 Clear settings from ~/.keys/settings.json
