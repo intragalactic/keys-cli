@@ -114,7 +114,7 @@ let load_creds = async (model) => {
     if (!model.token) {
         if (model.settings.email) {
 
-            let creds = findCredentials('keys.cm');
+            let creds = keytar.findCredentials('keys.cm');
             if ( creds ){
                 let match = _.find(creds, {'account': model.settings.email });
                 if ( match ){

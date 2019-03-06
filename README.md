@@ -12,6 +12,20 @@ variables, they are decrypted locally after you fetch the blob. Don't lose your 
 
 You should have an account at [https://keys.cm](https://keys.cm) if you want to interact with the repository.
 
+### Optional Dependencies
+
+
+#### For Credential Storage on Linux
+
+Currently this library uses libsecret so you may need to install it before running npm install.
+
+Depending on your distribution, you will need to run the following command:
+
+Debian/Ubuntu: sudo apt-get install libsecret-1-dev
+Red Hat-based: sudo yum install libsecret-devel
+Arch Linux: sudo pacman -S libsecret
+
+
 ### Installing
 
 Install the package with npm. This will provide a new command in your shell, called `keys`
