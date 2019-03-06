@@ -11,6 +11,7 @@ const fs = require('fs');
 const _ = require('lodash');
 const colors = require('colors'); // eslint-disable-line no-unused-vars
 const exec_await = require('await-exec');
+const keytar = require('keytar')
 
 const {
     exec,
@@ -75,50 +76,65 @@ let debug = (message) => {
 
 let unstore_creds = (model) => {
     if (model.settings.email) {
-        if (process.platform === 'darwin') {
-            let cmd = `delete-generic-password -a ${model.settings.email} -s keys.cm`;
-            exec(cmd, (err, stdout, stderr) => {
-                if (err) {
-                    debug("Error removing credentials from keychain");
-                } else {
-                    debug("Removed credentials from keychain");
-                }
-            });
-        }
+
+        keytar.deletePassword('keys.cm', model.settings.email);
+        // if (process.platform === 'darwin') {
+        //     let cmd = `delete-generic-password -a ${model.settings.email} -s keys.cm`;
+        //     exec(cmd, (err, stdout, stderr) => {
+        //         if (err) {
+        //             debug("Error removing credentials from keychain");
+        //         } else {
+        //             debug("Removed credentials from keychain");
+        //         }
+        //     });
+        // }
     }
 }
 
 let store_creds = (creds) => {
-    if (process.platform === 'darwin') {
-        if (creds.email && creds.passwd) {
-            let cmd = `security add-generic-password -a ${creds.email} -s keys.cm -w ${creds.passwd}`;
-            exec(cmd, (err, stdout, stderr) => {
-                if (err) {
-                    debug("Error storing credentials in keychain");
-                } else {
-                    debug("Saved credentials in keychain");
-                }
-            });
-        }
-    }
+
+    keytar.setPassword('keys.cm', creds.email, creds.passwd )
+
+    // if (process.platform === 'darwin') {
+    //     if (creds.email && creds.passwd) {
+    //         let cmd = `security add-generic-password -a ${creds.email} -s keys.cm -w ${creds.passwd}`;
+    //         exec(cmd, (err, stdout, stderr) => {
+    //             if (err) {
+    //                 debug("Error storing credentials in keychain");
+    //             } else {
+    //                 debug("Saved credentials in keychain");
+    //             }
+    //         });
+    //     }
+    // }
 }
 
 let load_creds = async (model) => {
 
     if (!model.token) {
         if (model.settings.email) {
-            if (process.platform === 'darwin') {
-                let cmd = `security find-generic-password -a ${model.settings.email} -s keys.cm -g`;
-                let out = await exec_await(cmd);
-                let m = /password:\s+"(.*)"/g.exec(out.stderr);
-                if (m && m.length > 1) {
+
+            let creds = findCredentials('keys.cm');
+            if ( creds ){
+                let match = _.find(creds, {'account': model.settings.email });
+                if ( match ){
                     model.creds.email = model.settings.email;
-                    model.creds.passwd = m[1];
-                    debug("Loaded credentials from keychain");
+                    model.creds.passwd = match.password;
                 }
-            } else {
-                debug("Can't load stored credentials on this platform");
             }
+
+            // if (process.platform === 'darwin') {
+            //     let cmd = `security find-generic-password -a ${model.settings.email} -s keys.cm -g`;
+            //     let out = await exec_await(cmd);
+            //     let m = /password:\s+"(.*)"/g.exec(out.stderr);
+            //     if (m && m.length > 1) {
+            //         model.creds.email = model.settings.email;
+            //         model.creds.passwd = m[1];
+            //         debug("Loaded credentials from keychain");
+            //     }
+            // } else {
+            //     debug("Can't load stored credentials on this platform");
+            // }
         } else {
             debug("Skipping credentials load from platform, no default account set");
         }
@@ -506,6 +522,8 @@ let specials = (model) => {
 };
 
 let main = async () => {
+
+    console.error(process.platform);
 
     self_update(model)
         .then(print_intro)
