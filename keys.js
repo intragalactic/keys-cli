@@ -114,10 +114,10 @@ let load_creds = async (model) => {
     if (!model.token) {
         if (model.settings.email) {
 
-            let creds = keytar.findCredentials('keys.cm');
+            let creds = await keytar.findCredentials('keys.cm');
             if ( creds ){
                 let match = _.find(creds, {'account': model.settings.email });
-                if ( match ){
+                if (match) {
                     model.creds.email = model.settings.email;
                     model.creds.passwd = match.password;
                 }
@@ -451,7 +451,7 @@ let login = async (model) => {
                 json: req
             }).then((body) => {
 
-                success('AuthSuccess');
+                success('AuthSuccess', `for ${model.creds.email}`);
                 _.merge(model, body);
 
                 store_creds(model.creds);
@@ -464,7 +464,7 @@ let login = async (model) => {
 
         } else {
 
-            success('AuthSuccess');
+            success('AuthSuccess', `for ${model.creds.email}`);
             _.merge(model, body);
 
             return Promise.resolve(model);
