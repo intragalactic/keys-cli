@@ -27,7 +27,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.1.0',
+        version: '2.1.3',
         endpoint: 'https://api.keys.cm'
     },
     args: [],
@@ -76,37 +76,12 @@ let debug = (message) => {
 
 let unstore_creds = (model) => {
     if (model.settings.email) {
-
         keytar.deletePassword('keys.cm', model.settings.email);
-        // if (process.platform === 'darwin') {
-        //     let cmd = `delete-generic-password -a ${model.settings.email} -s keys.cm`;
-        //     exec(cmd, (err, stdout, stderr) => {
-        //         if (err) {
-        //             debug("Error removing credentials from keychain");
-        //         } else {
-        //             debug("Removed credentials from keychain");
-        //         }
-        //     });
-        // }
     }
 }
 
 let store_creds = (creds) => {
-
-    keytar.setPassword('keys.cm', creds.email, creds.passwd )
-
-    // if (process.platform === 'darwin') {
-    //     if (creds.email && creds.passwd) {
-    //         let cmd = `security add-generic-password -a ${creds.email} -s keys.cm -w ${creds.passwd}`;
-    //         exec(cmd, (err, stdout, stderr) => {
-    //             if (err) {
-    //                 debug("Error storing credentials in keychain");
-    //             } else {
-    //                 debug("Saved credentials in keychain");
-    //             }
-    //         });
-    //     }
-    // }
+    keytar.setPassword('keys.cm', creds.email, creds.passwd);
 }
 
 let load_creds = async (model) => {
@@ -118,23 +93,11 @@ let load_creds = async (model) => {
             if ( creds ){
                 let match = _.find(creds, {'account': model.settings.email });
                 if (match) {
+                    debug('Loaded credentials from keychain');
                     model.creds.email = model.settings.email;
                     model.creds.passwd = match.password;
                 }
             }
-
-            // if (process.platform === 'darwin') {
-            //     let cmd = `security find-generic-password -a ${model.settings.email} -s keys.cm -g`;
-            //     let out = await exec_await(cmd);
-            //     let m = /password:\s+"(.*)"/g.exec(out.stderr);
-            //     if (m && m.length > 1) {
-            //         model.creds.email = model.settings.email;
-            //         model.creds.passwd = m[1];
-            //         debug("Loaded credentials from keychain");
-            //     }
-            // } else {
-            //     debug("Can't load stored credentials on this platform");
-            // }
         } else {
             debug("Skipping credentials load from platform, no default account set");
         }
@@ -220,7 +183,7 @@ let handle_args = (model) => {
                 } else if (item === '-v' || item === '--verbose') {
                     model.debug = true;
                 } else if (item === '-e' || item === '--environment') {
-                    last_was_env = true
+                    last_was_env = true;
                 } else if (item === '--clean') {
                     clean = true;
                 }
@@ -522,8 +485,6 @@ let specials = (model) => {
 };
 
 let main = async () => {
-
-    console.error(process.platform);
 
     self_update(model)
         .then(print_intro)

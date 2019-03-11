@@ -41,7 +41,7 @@ command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.1.2
+keys 2.1.3
 Email: me@example.com
 Password: *********
 AuthSuccess

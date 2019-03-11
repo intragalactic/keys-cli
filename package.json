@@ -1,6 +1,6 @@
 {
   "name": "keys-cm",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "The keys.cm cli. Decrypt environment variable sets and load them into any process",
   "homepage": "https://keys.cm/",
   "bugs": {
@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "eslint": "^5.8.0",
-    "jest": "^23.6.0"
+    "jest": "^24.4.0"
   },
   "dependencies": {
     "await-exec": "^0.1.2",
