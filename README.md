@@ -63,16 +63,12 @@ $ keys bin/rails server -e production -p 4000
 `-e | --environment environment-name`
 Specifies the environment to load, skipping the prompt which asks for it.
 
-`-t | --token`
-specifies that the KEYS_TOKEN variable in the local environment should be read for an access token for
-a specific environment. This will bypass normal username/password authentication.
-
-```
-keys -t access_token command
-```
-
 `-v | --verbose`
 Enable verbose mode, printing debugging messages about what is going on.
+
+`-c | --clean`
+By default, keys will append environment variables to your current shell environment before running your command.
+This flag will run your command with _only_ the variables from the selected environment.
 
 `-i | --import`
 Pipe lines of variables key=value into stdin to import variables to an environment specified by `-e`.
@@ -84,6 +80,14 @@ echo "VAR1=ABC\nVAR2=DEF" | keys -i -e myenv
 
 ```
 heroku config -s | keys -i -e myenv
+```
+
+`-t | --token`
+specifies that the KEYS_TOKEN variable in the local environment should be read for an access token for
+a specific environment. This will bypass normal username/password authentication.
+
+```
+KEYS_TOKEN=abc123 keys -t command
 ```
 
 `--reset`
