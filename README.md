@@ -12,19 +12,14 @@ variables, they are decrypted locally after you fetch the blob. Don't lose your 
 
 You should have an account at [https://keys.cm](https://keys.cm) if you want to interact with the repository.
 
-### Optional Dependencies
+#### Linux Build Dependencies
+Before `npm install`, you may have to install `python2` and `libsecret`
 
-
-#### For Credential Storage on Linux
-
-Currently this library uses libsecret so you may need to install it before running npm install.
-
-Depending on your distribution, you will need to run the following command:
-
-Debian/Ubuntu: sudo apt-get install libsecret-1-dev
-Red Hat-based: sudo yum install libsecret-devel
-Arch Linux: sudo pacman -S libsecret
-
+```bash
+sudo apt-get install libsecret-1-dev # Debian/Ubuntu
+sudo yum install libsecret-devel # Red Hat-based
+sudo pacman -S libsecret # Arch Linux
+```
 
 ### Installing
 
@@ -41,10 +36,9 @@ command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.1.3
-Email: me@example.com
-Password: *********
-AuthSuccess
+keys 2.1.4
+Loaded credentials from keychain
+AuthSuccess for user@example.com
 Choose the environment to load:
 [1] myapp-dev
 [2] myapp-prod
@@ -73,11 +67,27 @@ Specifies the environment to load, skipping the prompt which asks for it.
 specifies that the KEYS_TOKEN variable in the local environment should be read for an access token for
 a specific environment. This will bypass normal username/password authentication.
 
+```
+keys -t access_token command
+```
+
 `-v | --verbose`
 Enable verbose mode, printing debugging messages about what is going on.
 
-`--clean`
-Clear settings from ~/.keys/settings.json
+`-i | --import`
+Pipe lines of variables key=value into stdin to import variables to an environment specified by `-e`.
+*This will overwrite the environment*
+
+```
+echo "VAR1=ABC\nVAR2=DEF" | keys -i -e myenv
+```
+
+```
+heroku config -s | keys -i -e myenv
+```
+
+`--reset`
+Reset credentials and settings from ~/.keys/settings.json
 
 ### Access Tokens
 
