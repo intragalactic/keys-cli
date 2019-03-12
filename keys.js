@@ -30,7 +30,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.1.4',
+        version: '2.1.5',
         endpoint: 'https://api.keys.cm'
     },
     args: [],
