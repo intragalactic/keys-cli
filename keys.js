@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-let request = require('request-promise');
+const request = require('request-promise');
 let {
     SHA3
 } = require('sha3');
@@ -14,6 +14,7 @@ const exec_await = require('await-exec');
 const keytar = require('keytar');
 const get_stdin = require('get-stdin');
 const moment = require('moment');
+const uuid = require('uuid/v4');
 
 const {
     exec,
@@ -329,7 +330,6 @@ let ask_creds = async (model) => {
 
 let import_env = async (model) => {
     if (model && model.import) {
-
         let import_vars = {};
         if (model.input) {
             let lines = model.input.split('\n');
@@ -355,9 +355,15 @@ let import_env = async (model) => {
         }
 
         let body = {
-            id: model.selected,
-            vars_ct: crypto.encrypt(model.user.org_keys[model.user.envs[model.selected].org], JSON.stringify(import_vars))
-        };
+            vars_ct: crypto.encrypt(model.user.org_key, JSON.stringify(import_vars))
+        }
+        if (model.create_env) {
+            model.selected = uuid();
+            body.id = model.selected;
+            body.name = model.env_name;
+        } else {
+            body.id = model.selected;
+        }
         let options = {
             uri: model.client.endpoint + '/env/update',
             jar: true,
@@ -365,7 +371,8 @@ let import_env = async (model) => {
             method: 'POST'
         };
         return request(options).then((body) => {
-            info('Updated'.yellow, model.user.envs[model.selected].name.bold, `with ${_.size(import_vars)} variables from stdin`);
+            let action = model.create_env ? 'Created' : 'Updated';
+            info(action.yellow, model.env_name.bold, `with ${_.size(import_vars)} variables from stdin`);
             return Promise.resolve(null);
         }).catch((err) => {
             error(err);
@@ -387,7 +394,11 @@ let ask_env = async (model) => {
         if (found) {
             model.selected = found.id;
         } else {
-            info('NotFound'.yellow, model.env_name);
+            if (model.import) {
+                model.create_env = true;
+            } else {
+                info('NotFound'.yellow, model.env_name);
+            }
         }
     }
 
@@ -415,9 +426,13 @@ let ask_env = async (model) => {
                 error('invalid index');
             }
         } else {
-            info('Use', '-e name'.yellow, 'with', '-i'.yellow, 'to specify an environment to create/update');
-            info('  with the lines from stdin (name=value)');
-            return Promise.resolve(null);
+            if (model.create_env) {
+                return Promise.resolve(model);
+            } else {
+                info('Use', '-e name'.yellow, 'with', '-i'.yellow, 'to specify an environment to create/update');
+                info('  with the lines from stdin (name=value)');
+                return Promise.resolve(null);
+            }
         }
     }
 };
@@ -534,7 +549,7 @@ let decrypt_model = (model) => {
     let passwd = _.has(model.creds, 'token') ? model.creds.token : model.creds.passwd;
     let org_key_ct = _.has(model, 'org_key_ct') ? model.org_key_ct : model.user.org_keys_ct[model.org.id];
 
-    let keypair, result, org_key;
+    let keypair, result;
 
     if (_.has(model.creds, 'token')) {
         org_key = crypto.decrypt(passwd, JSON.stringify(org_key_ct));
@@ -542,7 +557,7 @@ let decrypt_model = (model) => {
 
         keypair = cryptico.generateRSAKey(passwd, 1024);
         result = cryptico.decrypt(org_key_ct, keypair);
-        org_key = result.plaintext;
+        model.user.org_key = result.plaintext;
 
         if (_.has(model.user, 'org_keys_ct')) {
             model.user.org_keys = {};
@@ -558,7 +573,7 @@ let decrypt_model = (model) => {
         if (model.token && (!_.has(model, 'selected') || !model.selected)) {
             model.selected = id;
         }
-        model.org.envs[id].vars = JSON.parse(crypto.decrypt(org_key, env.vars_ct));
+        model.org.envs[id].vars = JSON.parse(crypto.decrypt(model.user.org_key, env.vars_ct));
     });
 
     return Promise.resolve(model);
