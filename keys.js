@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 const request = require('request-promise');
-let { SHA3 } = require('sha3');
+let {
+    SHA3
+} = require('sha3');
 const cryptico = require('cryptico');
 const crypto = require('sjcl');
 const promptly = require('promptly');
@@ -23,13 +25,14 @@ const {
 let default_settings = {
     default_environment: null,
     ask_everytime: false,
-    self_update: false
+    self_update: false,
+    registered: false
 };
 
 let model = {
     debug: false,
     client: {
-        version: '2.1.5',
+        version: '2.1.7',
         endpoint: 'https://api.keys.cm'
     },
     args: [],
@@ -38,7 +41,8 @@ let model = {
     creds: {},
     reset: false,
     clean: false,
-    import: false
+    import: false,
+    fresh: false,
 };
 
 // let stdout = process.stdout;
@@ -112,62 +116,64 @@ let load_creds = async (model) => {
 
 let print_intro = (model) => {
 
-    model.spinner.stop();
+    if (model) {
+        model.spinner.stop();
 
-    if (model.client.version === model.latest) {
-        info(`${model.client.version} ` + `(latest) ${model.client.endpoint}`.grey);
-    } else {
-        info(`${model.client.version} ` + `(latest is ${model.latest}) ${model.client.endpoint}`.grey);
+        if (model.client.version === model.latest) {
+            info(`${model.client.version} ` + `(latest) ${model.client.endpoint}`.grey);
+        } else {
+            info(`${model.client.version} ` + `(latest is ${model.latest}) ${model.client.endpoint}`.grey);
+        }
+        debug('Options: ' + _.join(model.args, ' '));
     }
-    debug('Options: ' + _.join(model.args, ' '));
     return Promise.resolve(model);
 };
 
 let self_update = (model) => {
 
-    model.spinner = new spinner('%s Initializing ' + 'keys'.green + ' ');
-    model.spinner.setSpinnerString(18);
-    model.spinner.start();
+    if (model) {
+        return request.get(model.client.endpoint + '/info').then((body) => {
 
-    return request.get(model.client.endpoint + '/info').then((body) => {
+            let info = JSON.parse(body)
+            model.latest = info.version;
 
-        let info = JSON.parse(body)
-        model.latest = info.version;
+            if (_.has(info, 'news')) {
+                info(...info.news);
+            }
 
-        if (_.has(info, 'news')) {
-            info(...info.news);
-        }
+            if (!model.settings.self_update) {
+                return Promise.resolve(model);
+            }
 
-        if (!model.settings.self_update) {
-            return Promise.resolve(model);
-        }
+            if (_.includes(process.argv[0], 'node')) {
+                debug('Running as a non-binary script, skipping self-update.');
+                return Promise.resolve(model);
+            } else if (model.version == model.latest) {
+                return Promise.resolve(model);
+            } else {
 
-        if (_.includes(process.argv[0], 'node')) {
-            debug('Running as a non-binary script, skipping self-update.');
-            return Promise.resolve(model);
-        } else if (model.version == model.latest) {
-            return Promise.resolve(model);
-        } else {
+                return exec('uname', function (error, stdout) {
+                    if (error) throw error;
+                    let uname = _.trim(_.toLower(stdout));
+                    let myself = null;
 
-            return exec('uname', function (error, stdout) {
-                if (error) throw error;
-                let uname = _.trim(_.toLower(stdout));
-                let myself = null;
-
-                return request.get(model.client.endpoint + `/dist/bin/${uname}/keys`, {
-                    encoding: null
-                }).then((bin) => {
-                    myself = process.argv[0];
-                    fs.writeFileSync(myself, bin, {
+                    return request.get(model.client.endpoint + `/dist/bin/${uname}/keys`, {
                         encoding: null
+                    }).then((bin) => {
+                        myself = process.argv[0];
+                        fs.writeFileSync(myself, bin, {
+                            encoding: null
+                        });
+                        return Promise.resolve(model);
                     });
-                    return Promise.resolve(model);
                 });
-            });
-        }
-    }).catch(err => {
-        die(`Could not reach endpoint ${model.client.endpoint}`);
-    });
+            }
+        }).catch(err => {
+            die(`Could not reach endpoint ${model.client.endpoint}`);
+        });
+    } else {
+        return Promise.resolve(null);
+    }
 };
 
 let update_config = (model) => {
@@ -181,9 +187,11 @@ let update_config = (model) => {
 };
 
 let capture_stdin = async (model) => {
-    await get_stdin().then(str => {
-        model.input = str;
-    });
+    if (model) {
+        await get_stdin().then(str => {
+            model.input = str;
+        });
+    }
     return Promise.resolve(model);
 };
 
@@ -193,6 +201,7 @@ let handle_args = (model) => {
     let start_cmd = false;
     let last_was_token = false
     let last_was_env = false;
+    let last_was_endpoint = false;
     _.each(items, (item) => {
         if (!start_cmd) {
             if (_.startsWith(item, '-')) {
@@ -206,6 +215,10 @@ let handle_args = (model) => {
                     model.clean = true;
                 } else if (item === '-i' || item === '--import') {
                     model.import = true;
+                } else if (item === '--register') {
+                    model.fresh = true;
+                } else if (item === '--endpoint') {
+                    last_was_endpoint = true;
                 } else if (item === '--reset') {
                     model.reset = true;
                 }
@@ -216,6 +229,9 @@ let handle_args = (model) => {
             } else if (last_was_env) {
                 model.env_name = item;
                 last_was_env = false;
+            } else if (last_was_endpoint) {
+                model.client.endpoint = item;
+                last_was_endpoint = false;
             } else {
                 start_cmd = true;
                 model.cmd.push(item);
@@ -229,7 +245,9 @@ let handle_args = (model) => {
         unstore_creds(model);
         model.settings = _.cloneDeep(default_settings);
         update_config(model);
+        info('');
         info('Configuration Reset'.yellow);
+        model.spinner.stop();
         return Promise.resolve(null);
     } else {
         model.cmd = _.join(model.cmd, ' ');
@@ -259,21 +277,29 @@ let handle_args = (model) => {
 
 let load_config = (model) => {
 
-    let dir = process.env.HOME + '/.keys';
-    let file = dir + '/settings.json';
+    if (model) {
+        let dir = process.env.HOME + '/.keys';
+        let file = dir + '/settings.json';
 
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir);
+            model.fresh = true;
+        }
+
+        if (!fs.existsSync(file)) {
+            fs.writeFileSync(file, JSON.stringify(model.settings), {
+                encoding: 'utf-8'
+            });
+            model.fresh = true;
+        }
+
+        let content = fs.readFileSync(file, 'utf-8');
+        _.assign(model.settings, JSON.parse(content));
+
+        if (!model.settings.registered) {
+            model.fresh = true;
+        }
     }
-
-    if (!fs.existsSync(file)) {
-        fs.writeFileSync(file, JSON.stringify(model.settings), {
-            encoding: 'utf-8'
-        });
-    }
-
-    let content = fs.readFileSync(file, 'utf-8');
-    _.assign(model.settings, JSON.parse(content));
     return Promise.resolve(model);
 };
 
@@ -305,40 +331,127 @@ let ask_creds = async (model) => {
         if (model.token) {
             debug('Auth token provided, skipping credential prompt.');
             model.creds.token = model.token;
-        } else if (!model.creds.email || !model.creds.passwd) {
+        } else {
 
-            let text = 'Email: ';
-            let email_options = {
-                output: process.stderr
-            };
-            let passwd_options = {
-                silent: true,
-                output: process.stderr
-            };
+            if (model.fresh) {
+                info('');
+                let ask = 'Set up a new repository? [Y/n]';
+                let register_options = {
+                    output: process.stderr,
+                    default: 'Y'
+                };
+                let answer = await promptly.prompt(ask, register_options);
+                if (answer === 'Y' || answer === 'y') {
 
-            if (_.has(model.settings, 'email')) {
-                text = `Email [${model.settings.email}]:`;
-                email_options.default = model.settings.email;
+                    info('Creating new account...'.grey);
+
+                    let email_options = {
+                        output: process.stderr
+                    };
+                    let email = await promptly.prompt('Email: ', email_options);
+
+                    let passwd_options = {
+                        silent: true,
+                        output: process.stderr
+                    };
+                    let passwd = await promptly.prompt('Password: ', passwd_options);
+                    let confirm = await promptly.prompt('Confirm Password: ', passwd_options);
+
+                    if (passwd === confirm) {
+
+                        let org_key = uuid();
+                        let keypair = cryptico.generateRSAKey(passwd, 1024);
+                        let public_key = cryptico.publicKeyString(keypair);
+                        let hash = new SHA3(512);
+                        hash.update(passwd);
+
+                        let body = {
+                            public_key: public_key,
+                            org_key_ct: cryptico.encrypt(org_key, public_key).cipher
+                        };
+                        body['passwd_hash'] = hash.digest('hex');
+                        body['email'] = email;
+
+                        let sample_vars = {
+                            'AWS_ACCESS_KEY_ID': {
+                                'value': 'abc123',
+                                'updated': moment().unix(),
+                            },
+                            'AWS_SECRET_ACCESS_KEY': {
+                                'value': 'xyz456',
+                                'updated': moment().unix(),
+                            },
+                            'AWS_DEFAULT_REGION': {
+                                'value': 'us-east-1',
+                                'updated': moment().unix(),
+                            }
+                        };
+                        body['vars_ct'] = crypto.encrypt(org_key, JSON.stringify(sample_vars));
+
+                        let options = {
+                            uri: model.client.endpoint + '/register',
+                            jar: true,
+                            json: body,
+                            method: 'POST'
+                        };
+                        return request(options).then((body) => {
+                            info('Created Account'.green, `at ${model.client.endpoint}`.grey);
+                            model.settings.registered = true;
+                            model.creds.email = email;
+                            model.creds.passwd = passwd;
+                            model.settings.email = model.creds.email;
+                            return Promise.resolve(model);
+                        }).catch((err) => {
+                            error(err);
+                            return Promise.resolve(null);
+                        });
+
+                    } else {
+                        error('Passwords did not match');
+                        return Promise.resolve(null);
+                    }
+
+                } else {
+                    model.fresh = false;
+                    info('Log into existing account...'.grey);
+                }
             }
 
-            try {
-                model.creds.email = await promptly.prompt(text, email_options);
-            } catch (e) {
-                console.error(e);
-                process.exit();
-            }
+            if(!model.fresh && (!model.creds.email || !model.creds.passwd)){
 
-            if (!model.creds.email || !model.creds.email.length) {
-                model.creds.email = model.setttings.email;
-            } else {
-                model.settings.email = model.creds.email;
-                let file = process.env.HOME + '/.keys/settings.json';
-                fs.writeFileSync(file, JSON.stringify(model.settings), {
-                    encoding: 'utf-8'
-                });
-            }
+                let text = 'Email: ';
+                let email_options = {
+                    output: process.stderr
+                };
+                let passwd_options = {
+                    silent: true,
+                    output: process.stderr
+                };
 
-            model.creds.passwd = await promptly.prompt('Password: ', passwd_options);
+                if (_.has(model.settings, 'email')) {
+                    text = `Email [${model.settings.email}]:`;
+                    email_options.default = model.settings.email;
+                }
+
+                try {
+                    model.creds.email = await promptly.prompt(text, email_options);
+                } catch (e) {
+                    console.error(e);
+                    process.exit();
+                }
+
+                if (!model.creds.email || !model.creds.email.length) {
+                    model.creds.email = model.setttings.email;
+                } else {
+                    model.settings.email = model.creds.email;
+                    let file = process.env.HOME + '/.keys/settings.json';
+                    fs.writeFileSync(file, JSON.stringify(model.settings), {
+                        encoding: 'utf-8'
+                    });
+                }
+
+                model.creds.passwd = await promptly.prompt('Password: ', passwd_options);
+            }
         }
     }
 
@@ -402,54 +515,56 @@ let import_env = async (model) => {
 
 let ask_env = async (model) => {
 
-    if (model.token) {
-        model.selected = _.findKey(model.org.envs, () => true);
-    } else if (model.env_name) {
-        let found = _.find(model.org.envs, {
-            name: model.env_name
-        });
-        if (found) {
-            model.selected = found.id;
-        } else {
-            if (model.import) {
-                model.create_env = true;
+    if (model) {
+        if (model.token) {
+            model.selected = _.findKey(model.org.envs, () => true);
+        } else if (model.env_name) {
+            let found = _.find(model.org.envs, {
+                name: model.env_name
+            });
+            if (found) {
+                model.selected = found.id;
             } else {
-                info('NotFound'.yellow, model.env_name);
+                if (model.import) {
+                    model.create_env = true;
+                } else {
+                    info('NotFound'.yellow, model.env_name);
+                }
             }
         }
-    }
 
-    if (model.selected) {
-        if (!model.import) {
-            info(`Loading environment: ${model.org.envs[model.selected].name}`);
-        }
-        return Promise.resolve(model);
-    } else {
-        if (!model.import) {
-            let text = `Choose the environment to load:\n`;
-            let i = 1;
-            let options = {};
-            let envs = _.map(model.org.envs, (env) => {
-                return env;
-            });
-            _.each(envs, (env) => {
-                text += `[${i++}] ${env.name}\n`;
-            });
-            text += `Load #: \n`;
-            let env_index = await promptly.prompt(text, options);
-            if (env_index > 0 && envs.length >= env_index) {
-                model.selected = envs[env_index - 1].id;
-                return Promise.resolve(model);
-            } else {
-                error('invalid index');
+        if (model.selected) {
+            if (!model.import) {
+                info(`Loading environment: ${model.org.envs[model.selected].name}`);
             }
+            return Promise.resolve(model);
         } else {
-            if (model.create_env) {
-                return Promise.resolve(model);
+            if (!model.import) {
+                let text = `Choose the environment to load:\n`;
+                let i = 1;
+                let options = {};
+                let envs = _.map(model.org.envs, (env) => {
+                    return env;
+                });
+                _.each(envs, (env) => {
+                    text += `[${i++}] ${env.name}\n`;
+                });
+                text += `Load #: \n`;
+                let env_index = await promptly.prompt(text, options);
+                if (env_index > 0 && envs.length >= env_index) {
+                    model.selected = envs[env_index - 1].id;
+                    return Promise.resolve(model);
+                } else {
+                    error('invalid index');
+                }
             } else {
-                info('Use', '-e name'.yellow, 'with', '-i'.yellow, 'to specify an environment to create/update');
-                info('  with the lines from stdin (name=value)');
-                return Promise.resolve(null);
+                if (model.create_env) {
+                    return Promise.resolve(model);
+                } else {
+                    info('Use', '-e name'.yellow, 'with', '-i'.yellow, 'to specify an environment to create/update');
+                    info('  with the lines from stdin (name=value)');
+                    return Promise.resolve(null);
+                }
             }
         }
     }
@@ -517,7 +632,6 @@ let login = async (model) => {
             json: req,
             method: 'POST'
         };
-        // console.log(options);
         return request(options).then(async (body) => {
 
             if (_.has(body, '2fa') && body['2fa']) {
@@ -536,6 +650,7 @@ let login = async (model) => {
 
                     info('AuthSuccess'.green, `for ${model.creds.email}`.grey);
                     _.merge(model, body);
+                    model.settings.registered = true;
 
                     store_creds(model.creds);
                     return Promise.resolve(model);
@@ -548,6 +663,7 @@ let login = async (model) => {
             } else {
 
                 info('AuthSuccess'.green, `for ${model.creds.email}`.grey);
+                model.settings.registered = true;
                 _.merge(model, body);
                 store_creds(model.creds);
 
@@ -622,19 +738,23 @@ let specials = (model) => {
 
 let main = async () => {
 
-    self_update(model)
+    model.spinner = new spinner('%s Initializing ' + 'keys'.green + ' ');
+    model.spinner.setSpinnerString(18);
+    model.spinner.start();
+
+    handle_args(model)
+        .then(self_update)
         .then(capture_stdin)
         .then(print_intro)
         .then(load_config)
-        .then(handle_args)
         .then(load_creds)
         .then(ask_creds)
         .then(host_info)
         .then(login)
+        .then(update_config)
         .then(decrypt_model)
         .then(ask_env)
         .then(import_env)
-        .then(update_config)
         .then(specials)
         .then(execute)
         .catch((e) => {
