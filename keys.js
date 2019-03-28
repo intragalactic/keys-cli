@@ -32,8 +32,8 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.1.7',
-        endpoint: 'https://api.keys.cm'
+        version: '2.1.8',
+        endpoint: 'https://keys.cm'
     },
     args: [],
     cmd: [],
@@ -479,6 +479,7 @@ let import_env = async (model) => {
                             updated: moment().unix(),
                             by: model.user.id
                         }
+                        console.error(import_vars[key].updated);
                     }
                 }
             });
@@ -512,6 +513,27 @@ let import_env = async (model) => {
         return Promise.resolve(model);
     }
 }
+
+let update_stats = async (model) => {
+
+    if (model && model.selected) {
+
+        let body = {
+            id: model.selected,
+            accessed: moment().unix()
+        }
+
+        let options = {
+            uri: model.client.endpoint + '/env/update',
+            jar: true,
+            json: body,
+            method: 'POST'
+        };
+        request(options).catch(err => error(err));
+    }
+
+    return Promise.resolve(model);
+};
 
 let ask_env = async (model) => {
 
@@ -754,6 +776,7 @@ let main = async () => {
         .then(update_config)
         .then(decrypt_model)
         .then(ask_env)
+        .then(update_stats)
         .then(import_env)
         .then(specials)
         .then(execute)
