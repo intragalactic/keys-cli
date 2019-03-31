@@ -32,7 +32,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.2.0',
+        version: '2.2.1',
         endpoint: 'https://keys.cm'
     },
     args: [],
@@ -486,7 +486,6 @@ let import_env = async (model) => {
             });
         }
 
-        console.log(model);
         let body = {
             vars_ct: crypto.encrypt(model.user.org_keys[model.user.org], JSON.stringify(import_vars))
         }
