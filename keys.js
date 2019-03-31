@@ -32,7 +32,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.1.8',
+        version: '2.2.0',
         endpoint: 'https://keys.cm'
     },
     args: [],
@@ -481,14 +481,14 @@ let import_env = async (model) => {
                             updated: moment().unix(),
                             by: model.user.id
                         }
-                        console.error(import_vars[key].updated);
                     }
                 }
             });
         }
 
+        console.log(model);
         let body = {
-            vars_ct: crypto.encrypt(model.user.org_key, JSON.stringify(import_vars))
+            vars_ct: crypto.encrypt(model.user.org_keys[model.user.org], JSON.stringify(import_vars))
         }
         if (model.create_env) {
             model.selected = uuid();
