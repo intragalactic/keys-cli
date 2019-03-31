@@ -86,7 +86,9 @@ let unstore_creds = (model) => {
 }
 
 let store_creds = (creds) => {
-    keytar.setPassword('keys.cm', creds.email, creds.passwd);
+    if (!model.creds.token) {
+        keytar.setPassword('keys.cm', creds.email, creds.passwd);
+    }
 }
 
 let load_creds = async (model) => {
@@ -516,7 +518,7 @@ let import_env = async (model) => {
 
 let update_stats = async (model) => {
 
-    if (model && model.selected) {
+    if (model && model.selected && !model.creds.token) {
 
         let body = {
             id: model.selected,
@@ -542,7 +544,7 @@ let ask_env = async (model) => {
         if (model.token) {
             model.selected = _.findKey(model.user.envs, () => true);
         } else if (model.env_name) {
-            let found = _.find(model.org.envs, {
+            let found = _.find(model.user.envs, {
                 name: model.env_name
             });
             if (found) {
@@ -684,8 +686,8 @@ let login = async (model) => {
                 });
 
             } else {
-
-                info('AuthSuccess'.green, `for ${model.creds.email}`.grey);
+                let auth_for = model.creds.token ? 'token' : model.creds.email;
+                info('AuthSuccess'.green, `for ${auth_for}`.grey);
                 model.settings.registered = true;
                 _.merge(model, body);
                 store_creds(model.creds);
@@ -710,17 +712,21 @@ let decrypt_model = (model) => {
 
     if (model) {
         let passwd = _.has(model.creds, 'token') ? model.creds.token : model.creds.passwd;
-        let org_key_ct = _.has(model, 'org_key_ct') ? model.org_key_ct : model.user.org_keys_ct[model.org.id];
+        // let org_key_ct = _.has(model, 'org_key_ct') ? model.org_key_ct : model.user.org_keys_ct[model.org.id];
 
-        let keypair, result;
+        // let keypair, result;
 
         if (_.has(model.creds, 'token')) {
-            org_key = crypto.decrypt(passwd, JSON.stringify(org_key_ct));
+            // org_key = crypto.decrypt(passwd, JSON.stringify(org_key_ct));
+            model.user.org_keys = {};
+            _.each(model.user.org_keys_ct, (org_key_ct, orgid) => {
+                model.user.org_keys[orgid] = crypto.decrypt(passwd, JSON.stringify(org_key_ct));
+            });
         } else {
 
-            keypair = cryptico.generateRSAKey(passwd, 1024);
-            result = cryptico.decrypt(org_key_ct, keypair);
-            model.user.org_key = result.plaintext;
+        let keypair = cryptico.generateRSAKey(passwd, 1024);
+            // result = cryptico.decrypt(org_key_ct, keypair);
+            // model.user.org_key = result.plaintext;
 
             if (_.has(model.user, 'org_keys_ct')) {
                 model.user.org_keys = {};
