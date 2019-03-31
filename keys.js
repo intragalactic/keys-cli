@@ -520,7 +520,8 @@ let update_stats = async (model) => {
 
         let body = {
             id: model.selected,
-            accessed: moment().unix()
+            accessed: moment().unix(),
+            selected: true
         }
 
         let options = {
@@ -539,7 +540,7 @@ let ask_env = async (model) => {
 
     if (model) {
         if (model.token) {
-            model.selected = _.findKey(model.org.envs, () => true);
+            model.selected = _.findKey(model.user.envs, () => true);
         } else if (model.env_name) {
             let found = _.find(model.org.envs, {
                 name: model.env_name
@@ -557,7 +558,7 @@ let ask_env = async (model) => {
 
         if (model.selected) {
             if (!model.import) {
-                info(`Loading environment: ${model.org.envs[model.selected].name}`);
+                info(`Loading environment: ${model.user.envs[model.selected].name}`);
             }
             return Promise.resolve(model);
         } else {
@@ -565,7 +566,7 @@ let ask_env = async (model) => {
                 let text = `Choose the environment to load:\n`;
                 let i = 1;
                 let options = {};
-                let envs = _.map(model.org.envs, (env) => {
+                let envs = _.map(model.user.envs, (env) => {
                     return env;
                 });
                 _.each(envs, (env) => {
@@ -603,7 +604,7 @@ let execute = (model) => {
             shell = true;
         }
 
-        _.each(model.org.envs[model.selected].vars, (v, k) => {
+        _.each(model.user.envs[model.selected].vars, (v, k) => {
             env[k] = v.value;
         });
 
@@ -729,13 +730,11 @@ let decrypt_model = (model) => {
             }
         }
 
-        // TODO handle result.failure
-
-        _.each(model.org.envs, (env, id) => {
+        _.each(model.user.envs, (env, id) => {
             if (model.token && (!_.has(model, 'selected') || !model.selected)) {
                 model.selected = id;
             }
-            model.org.envs[id].vars = JSON.parse(crypto.decrypt(model.user.org_key, env.vars_ct));
+            model.user.envs[id].vars = JSON.parse(crypto.decrypt(model.user.org_keys[env.org], env.vars_ct));
         });
     }
 
@@ -746,7 +745,7 @@ let specials = (model) => {
 
     if (model) {
         let parts = _.chain(model.cmd).toLower().words().value();
-        let vars = model.org.envs[model.selected].vars;
+        let vars = model.user.envs[model.selected].vars;
 
         if (parts.length && parts[0] === 'docker') {
             _.each(vars, (val, key) => {
