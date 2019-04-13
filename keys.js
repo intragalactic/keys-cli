@@ -16,6 +16,7 @@ const get_stdin = require('get-stdin');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 const spinner = require('cli-spinner').Spinner;
+const columnify = require('columnify')
 
 const {
     exec,
@@ -32,7 +33,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.2.1',
+        version: '2.2.3',
         endpoint: 'https://keys.cm'
     },
     args: [],
@@ -564,22 +565,48 @@ let ask_env = async (model) => {
             return Promise.resolve(model);
         } else {
             if (!model.import) {
-                let text = `Choose the environment to load:\n`;
-                let i = 1;
                 let options = {};
-                let envs = _.map(model.user.envs, (env) => {
+                let envs_all = _.map(model.user.envs, (env) => {
                     return env;
                 });
-                _.each(envs, (env) => {
-                    text += `[${i++}] ${env.name}\n`;
-                });
-                text += `Load #: \n`;
+                let envs = {
+                    dev: _.filter(envs_all, { stage: 'dev' }),
+                    test: _.filter(envs_all, { stage: 'test' }),
+                    qa: _.filter(envs_all, { stage: 'qa' }),
+                    prod: _.filter(envs_all, { stage: 'prod' })
+                }
+                let choices = {
+                    dev: 1,
+                    test: 1 + envs.dev.length,
+                    qa: 1 + envs.dev.length + envs.test.length,
+                    prod: 1 + envs.dev.length + envs.test.length + envs.qa.length
+                }
+                let env_choice = {};
+                let rows = [];
+                for (let i = 0; i < envs_all.length; i++){
+                    let row = {}
+                    _.each(['dev', 'test', 'qa', 'prod'], (stage) => {
+                        let next = _.pullAt(envs[stage], [0]);
+                        if (next.length > 0 && next[0]) {
+                            row[stage] = `[${choices[stage]}] ${next[0].name}\n`;
+                            env_choice[''+choices[stage]++] = next[0].id;
+                        }
+                    });
+                    if (_.keys(row).length > 0) {
+                        rows.push(row);
+                    }
+                }
+
+                let columns = columnify(rows);
+                info(columns);
+                info();
+                text = `Load Environment #: `;
                 let env_index = await promptly.prompt(text, options);
-                if (env_index > 0 && envs.length >= env_index) {
-                    model.selected = envs[env_index - 1].id;
+                if (env_index > 0 && _.keys(env_choice).length >= env_index) {
+                    model.selected = env_choice[env_index];
                     return Promise.resolve(model);
                 } else {
-                    error('invalid index');
+                    error('Invalid Selection');
                 }
             } else {
                 if (model.create_env) {

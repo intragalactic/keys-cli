@@ -26,7 +26,7 @@ sudo pacman -S libsecret # Arch Linux
 Install the package with npm. This will provide a new command in your shell, called `keys`
 
 ```
-npm install -g keys-cm
+npm install -g keys-cli
 ```
 
 ### Usage
@@ -36,7 +36,7 @@ command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.2.1
+keys 2.2.3
 Loaded credentials from keychain
 AuthSuccess for user@example.com
 Choose the environment to load:
