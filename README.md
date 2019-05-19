@@ -36,13 +36,15 @@ command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.2.3
+keys 2.2.4
 Loaded credentials from keychain
 AuthSuccess for user@example.com
 Choose the environment to load:
-[1] myapp-dev
-[2] myapp-prod
-[3] otherapp-dev
+DEV                        TEST               PROD
+[1] goolybib-dev           [5] goolybib-test  [7] optimoji-prod
+[2] microservice-prototype [6] sliceline-test [8] sliceline-prod
+[3] optimoji-dev
+[4] sliceline-dev
 Executing: ./anything.sh -a 1 -b 2 # process now has access to AWS_SECRET_ACCESS_KEY
 ```
 

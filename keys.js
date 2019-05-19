@@ -33,7 +33,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.2.3',
+        version: '2.2.4',
         endpoint: 'https://keys.cm'
     },
     args: [],
@@ -676,6 +676,7 @@ let login = async (model) => {
             let hash = new SHA3(512);
             hash.update(model.creds.token);
             req.token_hash = hash.digest('hex');
+            console.log(req.token_hash);
         }
         let options = {
             uri: model.client.endpoint + '/login',
@@ -766,7 +767,9 @@ let decrypt_model = (model) => {
             if (model.token && (!_.has(model, 'selected') || !model.selected)) {
                 model.selected = id;
             }
-            model.user.envs[id].vars = JSON.parse(crypto.decrypt(model.user.org_keys[env.org], env.vars_ct));
+            if (env.vars_ct) {
+                model.user.envs[id].vars = JSON.parse(crypto.decrypt(model.user.org_keys[env.org], env.vars_ct));
+            }
         });
     }
 

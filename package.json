@@ -1,6 +1,6 @@
 {
   "name": "keys-cli",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "description": "The keys.cm cli. Decrypt environment variable sets and load them into any process",
   "homepage": "https://keys.cm/",
   "bugs": {
