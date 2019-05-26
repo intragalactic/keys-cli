@@ -1,7 +1,7 @@
 {
   "name": "keys-cli",
   "version": "2.2.4",
-  "description": "The keys.cm cli. Decrypt environment variable sets and load them into any process",
+  "description": "The keys.cm cli. Load encrypted environment variables at runtime.",
   "homepage": "https://keys.cm/",
   "bugs": {
     "url": "https://github.com/intragalactic/keys-cli/issues",
@@ -16,15 +16,13 @@
     "keys": "keys.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "ehlo@keys.cm",
   "license": "GPL-3.0-only",
   "private": false,
   "node_deb": {
-    "executable_name": "keys",
-    "package_name": "keys",
+    "init": "none",
     "entrypoints": {
-      "cli": "keys.js",
-      "daemon": "keys.js --daemon"
+      "cli": "keys.js"
     }
   },
   "devDependencies": {
