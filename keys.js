@@ -49,7 +49,7 @@ let model = {
 // let stdout = process.stdout;
 // process.stdout.write = process.stderr.write;
 
-process.on('SIGINT', function () {
+process.on('SIGINT', function() {
     process.exit();
 });
 
@@ -92,7 +92,7 @@ let store_creds = (creds) => {
     }
 }
 
-let load_creds = async (model) => {
+let load_creds = async(model) => {
     if (model) {
         if (!model.token) {
             if (model.settings.email) {
@@ -155,7 +155,7 @@ let self_update = (model) => {
                 return Promise.resolve(model);
             } else {
 
-                return exec('uname', function (error, stdout) {
+                return exec('uname', function(error, stdout) {
                     if (error) throw error;
                     let uname = _.trim(_.toLower(stdout));
                     let myself = null;
@@ -189,7 +189,7 @@ let update_config = (model) => {
     return Promise.resolve(model);
 };
 
-let capture_stdin = async (model) => {
+let capture_stdin = async(model) => {
     if (model) {
         await get_stdin().then(str => {
             model.input = str;
@@ -306,7 +306,7 @@ let load_config = (model) => {
     return Promise.resolve(model);
 };
 
-let host_info = async (model) => {
+let host_info = async(model) => {
 
     if (model) {
         model.client.type = 'default';
@@ -328,7 +328,7 @@ let host_info = async (model) => {
     return Promise.resolve(model);
 };
 
-let ask_creds = async (model) => {
+let ask_creds = async(model) => {
 
     if (model) {
         if (model.token) {
@@ -420,7 +420,7 @@ let ask_creds = async (model) => {
                 }
             }
 
-            if(!model.fresh && (!model.creds.email || !model.creds.passwd)){
+            if (!model.fresh && (!model.creds.email || !model.creds.passwd)) {
 
                 let text = 'Email: ';
                 let email_options = {
@@ -461,7 +461,7 @@ let ask_creds = async (model) => {
     return Promise.resolve(model);
 };
 
-let import_env = async (model) => {
+let import_env = async(model) => {
     if (model && model.import) {
         let import_vars = {};
         if (model.input) {
@@ -516,7 +516,7 @@ let import_env = async (model) => {
     }
 }
 
-let update_stats = async (model) => {
+let update_stats = async(model) => {
 
     if (model && model.selected && !model.creds.token) {
 
@@ -538,7 +538,7 @@ let update_stats = async (model) => {
     return Promise.resolve(model);
 };
 
-let ask_env = async (model) => {
+let ask_env = async(model) => {
 
     if (model) {
         if (model.token) {
@@ -583,13 +583,13 @@ let ask_env = async (model) => {
                 }
                 let env_choice = {};
                 let rows = [];
-                for (let i = 0; i < envs_all.length; i++){
+                for (let i = 0; i < envs_all.length; i++) {
                     let row = {}
                     _.each(['dev', 'test', 'qa', 'prod'], (stage) => {
                         let next = _.pullAt(envs[stage], [0]);
                         if (next.length > 0 && next[0]) {
                             row[stage] = `[${choices[stage]}] ${next[0].name}\n`;
-                            env_choice[''+choices[stage]++] = next[0].id;
+                            env_choice['' + choices[stage]++] = next[0].id;
                         }
                     });
                     if (_.keys(row).length > 0) {
@@ -655,7 +655,7 @@ let execute = (model) => {
     return Promise.resolve();
 };
 
-let login = async (model) => {
+let login = async(model) => {
 
     if (model) {
         let req = {
@@ -684,7 +684,7 @@ let login = async (model) => {
             json: req,
             method: 'POST'
         };
-        return request(options).then(async (body) => {
+        return request(options).then(async(body) => {
 
             if (_.has(body, '2fa') && body['2fa']) {
                 let twofactor_options = {
@@ -751,7 +751,7 @@ let decrypt_model = (model) => {
             });
         } else {
 
-        let keypair = cryptico.generateRSAKey(passwd, 1024);
+            let keypair = cryptico.generateRSAKey(passwd, 1024);
             // result = cryptico.decrypt(org_key_ct, keypair);
             // model.user.org_key = result.plaintext;
 
@@ -792,7 +792,7 @@ let specials = (model) => {
     return Promise.resolve(model);
 };
 
-let main = async () => {
+let main = async() => {
 
     model.spinner = new spinner('%s Initializing ' + 'keys'.green + ' ');
     model.spinner.setSpinnerString(18);
