@@ -676,7 +676,6 @@ let login = async(model) => {
             let hash = new SHA3(512);
             hash.update(model.creds.token);
             req.token_hash = hash.digest('hex');
-            console.log(req.token_hash);
         }
         let options = {
             uri: model.client.endpoint + '/login',
@@ -747,7 +746,7 @@ let decrypt_model = (model) => {
             // org_key = crypto.decrypt(passwd, JSON.stringify(org_key_ct));
             model.user.org_keys = {};
             _.each(model.user.org_keys_ct, (org_key_ct, orgid) => {
-                model.user.org_keys[orgid] = crypto.decrypt(passwd, JSON.stringify(org_key_ct));
+                model.user.org_keys[orgid] = crypto.decrypt(passwd, org_key_ct);
             });
         } else {
 

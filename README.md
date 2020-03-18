@@ -36,7 +36,7 @@ command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.2.6
+keys 2.2.8
 Loaded credentials from keychain
 AuthSuccess for user@example.com
 DEV                        TEST               PROD
