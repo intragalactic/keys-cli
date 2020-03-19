@@ -33,7 +33,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.2.5',
+        version: '2.2.9',
         endpoint: 'https://keys.cm'
     },
     args: [],
