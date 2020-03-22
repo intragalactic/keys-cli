@@ -1,6 +1,6 @@
 {
     "name": "keys-cli",
-    "version": "2.2.9",
+    "version": "2.3.0",
     "description": "The keys.cm cli. Load encrypted environment variables at runtime.",
     "homepage": "https://keys.cm/",
     "bugs": {

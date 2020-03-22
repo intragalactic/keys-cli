@@ -36,7 +36,7 @@ command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.2.9
+keys 2.3.0
 Loaded credentials from keychain
 AuthSuccess for user@example.com
 DEV                        TEST               PROD
@@ -71,6 +71,10 @@ Enable verbose mode, printing debugging messages about what is going on.
 `-c | --clean`
 By default, keys will append environment variables to your current shell environment before running your command.
 This flag will run your command with _only_ the variables from the selected environment.
+
+`-l | --local`
+Load encrypted data from local cache (at ~/.keys/cache.json) instead of logging into the remote repository. In normal
+mode this cache is used as a fallback in case the remote repository is inaccessible.
 
 `-i | --import`
 Pipe lines of variables key=value into stdin to import variables to an environment specified by `-e`.

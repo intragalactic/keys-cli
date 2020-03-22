@@ -33,7 +33,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.2.9',
+        version: '2.3.0',
         endpoint: 'https://keys.cm'
     },
     args: [],
@@ -44,6 +44,7 @@ let model = {
     clean: false,
     import: false,
     fresh: false,
+    local: false
 };
 
 // let stdout = process.stdout;
@@ -125,7 +126,9 @@ let print_intro = (model) => {
         if (model.client.version === model.latest) {
             info(`${model.client.version} ` + `(latest) ${model.client.endpoint}`.grey);
         } else {
-            info(`${model.client.version} ` + `(latest is ${model.latest}) ${model.client.endpoint}`.grey);
+            let latest = model.latest ? `(latest is ${model.latest})` : '';
+            let endpoint = model.local ? '(local mode)' : model.client.endpoint;
+            info(`${model.client.version} ${latest} ${endpoint}`.grey);
         }
         debug('Options: ' + _.join(model.args, ' '));
     }
@@ -172,7 +175,8 @@ let self_update = (model) => {
                 });
             }
         }).catch(err => {
-            die(`Could not reach endpoint ${model.client.endpoint}`);
+            debug(`\nCould not reach endpoint ${model.client.endpoint} during self_update`);
+            return Promise.resolve(model);
         });
     } else {
         return Promise.resolve(null);
@@ -187,6 +191,19 @@ let update_config = (model) => {
         });
     }
     return Promise.resolve(model);
+};
+
+let cache_model = (model) => {
+    if (model) {
+        let file = process.env.HOME + '/.keys/cache.json';
+        let cache = {}
+        cache.user = _.cloneDeep(model.user);
+        cache.orgs = _.cloneDeep(model.orgs);
+        cache.org = _.cloneDeep(model.org);
+        fs.writeFileSync(file, JSON.stringify(cache), {
+            encoding: 'utf-8'
+        });
+    }
 };
 
 let capture_stdin = async(model) => {
@@ -216,6 +233,8 @@ let handle_args = (model) => {
                     last_was_env = true;
                 } else if (item === '-c' || item === '--clean') {
                     model.clean = true;
+                } else if (item === '-l' || item === '--local') {
+                    model.local = true;
                 } else if (item === '-i' || item === '--import') {
                     model.import = true;
                 } else if (item === '--register') {
@@ -275,6 +294,20 @@ let handle_args = (model) => {
         }
 
         return Promise.resolve(model);
+    }
+}
+
+let load_cache = (model) => {
+    if (model) {
+        let file = process.env.HOME + '/.keys/cache.json';
+        if (fs.existsSync(file)) {
+            let content = fs.readFileSync(file, 'utf-8');
+            let cache = JSON.parse(content);
+            _.merge(model, cache);
+            return Promise.resolve(model);
+        } else {
+            console.error('No cache to load from, sorry.');
+        }
     }
 }
 
@@ -518,7 +551,7 @@ let import_env = async(model) => {
 
 let update_stats = async(model) => {
 
-    if (model && model.selected && !model.creds.token) {
+    if (!model.local && model && model.selected && !model.creds.token) {
 
         let body = {
             id: model.selected,
@@ -658,77 +691,89 @@ let execute = (model) => {
 let login = async(model) => {
 
     if (model) {
-        let req = {
-            client: model.client
-        };
+        if (model.local) {
+            return load_cache(model);
+        } else {
+            let req = {
+                client: model.client
+            };
 
-        if (_.has(model.creds, 'email')) {
-            req.email = model.creds.email;
-        }
+            if (_.has(model.creds, 'email')) {
+                req.email = model.creds.email;
+            }
 
-        if (_.has(model.creds, 'passwd')) {
-            let hash = new SHA3(512);
-            hash.update(model.creds.passwd);
-            req.passwd_hash = hash.digest('hex');
-        }
+            if (_.has(model.creds, 'passwd')) {
+                let hash = new SHA3(512);
+                hash.update(model.creds.passwd);
+                req.passwd_hash = hash.digest('hex');
+            }
 
-        if (_.has(model.creds, 'token')) {
-            let hash = new SHA3(512);
-            hash.update(model.creds.token);
-            req.token_hash = hash.digest('hex');
-        }
-        let options = {
-            uri: model.client.endpoint + '/login',
-            jar: true,
-            json: req,
-            method: 'POST'
-        };
-        return request(options).then(async(body) => {
+            if (_.has(model.creds, 'token')) {
+                let hash = new SHA3(512);
+                hash.update(model.creds.token);
+                req.token_hash = hash.digest('hex');
+            }
+            let options = {
+                uri: model.client.endpoint + '/login',
+                jar: true,
+                json: req,
+                method: 'POST'
+            };
+            return request(options).then(async(body) => {
 
-            if (_.has(body, '2fa') && body['2fa']) {
-                let twofactor_options = {
-                    output: process.stderr
-                };
-                let code = await promptly.prompt('2FA Code: ', twofactor_options);
+                if (_.has(body, '2fa') && body['2fa']) {
+                    let twofactor_options = {
+                        output: process.stderr
+                    };
+                    let code = await promptly.prompt('2FA Code: ', twofactor_options);
 
-                req = {
-                    user: body['user'],
-                    code: code
-                }
-                return request.post(model.client.endpoint + '/totp/login', {
-                    json: req
-                }).then((body) => {
+                    req = {
+                        user: body['user'],
+                        code: code
+                    }
+                    return request.post(model.client.endpoint + '/totp/login', {
+                        json: req
+                    }).then((body) => {
 
-                    info('AuthSuccess'.green, `for ${model.creds.email}`.grey);
-                    _.merge(model, body);
+                        info('AuthSuccess'.green, `for ${model.creds.email}`.grey);
+                        _.merge(model, body);
+                        model.settings.registered = true;
+
+                        store_creds(model.creds);
+                        return Promise.resolve(model);
+
+                    }).catch(err => {
+                        console.error(err.message);
+                        die('AuthFailed', 'Invalid 2FA Code');
+                    });
+
+                } else {
+                    let auth_for = model.creds.token ? 'token' : model.creds.email;
+                    info('AuthSuccess'.green, `for ${auth_for}`.grey);
                     model.settings.registered = true;
-
+                    _.merge(model, body);
+                    cache_model(model);
                     store_creds(model.creds);
+
                     return Promise.resolve(model);
+                }
 
-                }).catch(err => {
-                    console.error(err.message);
-                    die('AuthFailed', 'Invalid 2FA Code');
-                });
-
-            } else {
-                let auth_for = model.creds.token ? 'token' : model.creds.email;
-                info('AuthSuccess'.green, `for ${auth_for}`.grey);
-                model.settings.registered = true;
-                _.merge(model, body);
-                store_creds(model.creds);
-
-                return Promise.resolve(model);
-            }
-
-        }).catch(err => {
-            console.error(err.message);
-            if (model.token) {
-                die('AuthFailed', 'Invalid Token');
-            } else {
-                die('AuthFailed', 'Bad Username/Password');
-            }
-        });
+            }).catch(err => {
+                if (err.statusCode) {
+                    console.error('HTTP Error', err.statusCode);
+                }
+                if (err.statusCode === 401) {
+                    if (model.token) {
+                        die('AuthFailed', 'Invalid Token');
+                    } else {
+                        die('AuthFailed', 'Bad Username/Password');
+                    }
+                }
+                console.error(`Failure to reach ${model.client.endpoint}, entering --local mode.`)
+                model.local = true;
+                return load_cache(model);
+            });
+        }
     } else {
         return Promise.resolve(model);
     }
