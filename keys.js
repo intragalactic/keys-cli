@@ -16,7 +16,8 @@ const get_stdin = require('get-stdin');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 const spinner = require('cli-spinner').Spinner;
-const columnify = require('columnify')
+const columnify = require('columnify');
+const URL = require('url').URL;
 
 const {
     exec,
@@ -27,14 +28,14 @@ let default_settings = {
     default_environment: null,
     ask_everytime: false,
     self_update: false,
-    registered: false
+    registered: false,
+    endpoint: 'https://keys.cm'
 };
 
 let model = {
     debug: false,
     client: {
-        version: '2.3.0',
-        endpoint: 'https://keys.cm'
+        version: '2.3.1'
     },
     args: [],
     cmd: [],
@@ -78,6 +79,15 @@ let info = (...messages) => {
 let debug = (message) => {
     if (model.debug) {
         console.error(message.grey);
+    }
+};
+
+let validURL = (s) => {
+    try {
+        new URL(s);
+        return true;
+    } catch (err) {
+        return false;
     }
 };
 
@@ -186,7 +196,7 @@ let self_update = (model) => {
 let update_config = (model) => {
     if (model) {
         let file = process.env.HOME + '/.keys/settings.json';
-        fs.writeFileSync(file, JSON.stringify(model.settings), {
+        fs.writeFileSync(file, JSON.stringify(model.settings, null, '  '), {
             encoding: 'utf-8'
         });
     }
@@ -219,18 +229,20 @@ let handle_args = (model) => {
 
     let items = _.drop(process.argv, 2);
     let start_cmd = false;
-    let last_was_token = false
-    let last_was_env = false;
-    let last_was_endpoint = false;
+    let last = {
+        token: false,
+        environment: false,
+        endpoint: false
+    }
     _.each(items, (item) => {
         if (!start_cmd) {
             if (_.startsWith(item, '-')) {
                 if ((item === '-t' || item === '--token') && !process.env.KEYS_TOKEN) {
-                    last_was_token = true;
+                    last.token = true;
                 } else if (item === '-v' || item === '--verbose') {
                     model.debug = true;
                 } else if (item === '-e' || item === '--environment') {
-                    last_was_env = true;
+                    last.environment = true;
                 } else if (item === '-c' || item === '--clean') {
                     model.clean = true;
                 } else if (item === '-l' || item === '--local') {
@@ -240,26 +252,39 @@ let handle_args = (model) => {
                 } else if (item === '--register') {
                     model.fresh = true;
                 } else if (item === '--endpoint') {
-                    last_was_endpoint = true;
+                    last.endpoint = true;
                 } else if (item === '--reset') {
                     model.reset = true;
                 }
                 model.args.push(item);
-            } else if (last_was_token) {
+            } else if (last.token) {
                 model.args.push(item);
-                last_was_token = false;
-            } else if (last_was_env) {
+                last.token = false;
+            } else if (last.environment) {
                 model.env_name = item;
-                last_was_env = false;
-            } else if (last_was_endpoint) {
-                model.client.endpoint = item;
-                last_was_endpoint = false;
+                last.environment = false;
+            } else if (last.endpoint) {
+                if (validURL(item)) {
+                    model.client.endpoint = item;
+                } else {
+                    die('\nERROR'.red, '--endpoint requires a valid URL argument.');
+                }
+                last.endpoint = false;
             } else {
                 start_cmd = true;
                 model.cmd.push(item);
             }
         } else {
             model.cmd.push(item);
+        }
+    });
+
+    _.each(last, (v, k) => {
+        if (v) {
+            if (k == 'token') {
+                die('\nERROR'.red, `--${k} requires an argument ( or set KEYS_TOKEN in local environment)`);
+            }
+            die('\nERROR'.red, `--${k} requires an argument`);
         }
     });
 
@@ -331,6 +356,8 @@ let load_config = (model) => {
 
         let content = fs.readFileSync(file, 'utf-8');
         _.assign(model.settings, JSON.parse(content));
+
+        model.client.endpoint = model.settings.endpoint;
 
         if (!model.settings.registered) {
             model.fresh = true;
@@ -672,7 +699,7 @@ let execute = (model) => {
         if (_.trim(model.cmd).length < 1) {
             info('');
             info('Typical usage is:');
-            info('  keys [command you want to run with the environment vars loaded]');
+            info('  keys [command you want to run with the environment variables loaded]');
             info('');
             info('No command was provided, exiting. ');
         } else {
@@ -720,6 +747,8 @@ let login = async(model) => {
                 method: 'POST'
             };
             return request(options).then(async(body) => {
+
+                model.settings.endpoint = model.client.endpoint;
 
                 if (_.has(body, '2fa') && body['2fa']) {
                     let twofactor_options = {
@@ -769,7 +798,7 @@ let login = async(model) => {
                         die('AuthFailed', 'Bad Username/Password');
                     }
                 }
-                console.error(`Failure to reach ${model.client.endpoint}, entering --local mode.`)
+                error('WARN'.yellow, `Failure to reach ${model.client.endpoint}, entering --local mode.`)
                 model.local = true;
                 return load_cache(model);
             });
@@ -842,11 +871,11 @@ let main = async() => {
     model.spinner.setSpinnerString(18);
     model.spinner.start();
 
-    handle_args(model)
+    load_config(model)
+        .then(handle_args)
         .then(self_update)
         .then(capture_stdin)
         .then(print_intro)
-        .then(load_config)
         .then(load_creds)
         .then(ask_creds)
         .then(host_info)
