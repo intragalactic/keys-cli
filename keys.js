@@ -9,19 +9,20 @@ const crypto = require('sjcl');
 const promptly = require('promptly');
 const fs = require('fs');
 const _ = require('lodash');
-const colors = require('colors'); // eslint-disable-line no-unused-vars
 const exec_await = require('await-exec');
 const keytar = require('keytar');
 const get_stdin = require('get-stdin');
 const moment = require('moment');
-const uuid = require('uuid/v4');
-const spinner = require('cli-spinner').Spinner;
-const columnify = require('columnify');
+const uuid = require('uuid').v4;
+const ora = require('ora');
 const URL = require('url').URL;
+const ui = require('./ui');
+const liaison = require('./liaison/liaison');
 
 const {
     exec,
-    spawn
+    spawn,
+    execSync
 } = require('child_process');
 
 let default_settings = {
@@ -35,7 +36,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.3.1'
+        version: '2.4.0'
     },
     args: [],
     cmd: [],
@@ -45,7 +46,9 @@ let model = {
     clean: false,
     import: false,
     fresh: false,
-    local: false
+    local: false,
+    source: 'keys',
+    destination: null
 };
 
 // let stdout = process.stdout;
@@ -55,32 +58,6 @@ process.on('SIGINT', function() {
     process.exit();
 });
 
-let error = (...messages) => {
-    let line = '';
-    _.each(messages, (m, i) => {
-        line += i == 0 ? `${m} `.red : `${m} `;
-    });
-    console.error(line);
-};
-
-let die = (...messages) => {
-    error(...messages);
-    process.exit(1);
-}
-
-let info = (...messages) => {
-    let line = '';
-    _.each(messages, (m) => {
-        line += `${m} `;
-    });
-    console.error(line);
-};
-
-let debug = (message) => {
-    if (model.debug) {
-        console.error(message.grey);
-    }
-};
 
 let validURL = (s) => {
     try {
@@ -113,16 +90,16 @@ let load_creds = async(model) => {
                         'account': model.settings.email
                     });
                     if (match) {
-                        debug('Loaded credentials from keychain');
+                        ui.debug('Loaded credentials from keychain');
                         model.creds.email = model.settings.email;
                         model.creds.passwd = match.password;
                     }
                 }
             } else {
-                debug("Skipping credentials load from platform, no default account set");
+                ui.debug("Skipping credentials load from platform, no default account set");
             }
         } else {
-            debug("Skipping credentials load from platform, using token instead.");
+            ui.debug("Skipping credentials load from platform, using token instead.");
         }
     }
     return Promise.resolve(model);
@@ -131,17 +108,20 @@ let load_creds = async(model) => {
 let print_intro = (model) => {
 
     if (model) {
+
         model.spinner.stop();
 
         if (model.client.version === model.latest) {
-            info(`${model.client.version} ` + `(latest) ${model.client.endpoint}`.grey);
+            ui.info('Keys'.green, ` ${model.client.version} ` + `(latest) ${model.client.endpoint}`.grey);
         } else {
             let latest = model.latest ? `(latest is ${model.latest})` : '';
             let endpoint = model.local ? '(local mode)' : model.client.endpoint;
-            info(`${model.client.version} ${latest} ${endpoint}`.grey);
+            ui.info('Keys'.green + ` ${model.client.version} ` + `${latest} ${endpoint}`.grey);
         }
-        debug('Options: ' + _.join(model.args, ' '));
+        ui.debug('Options: ' + _.join(model.args, ' '));
+        ui.debug('Command: ' + model.cmd);
     }
+
     return Promise.resolve(model);
 };
 
@@ -154,7 +134,7 @@ let self_update = (model) => {
             model.latest = info.version;
 
             if (_.has(info, 'news')) {
-                info(...info.news);
+                ui.info(...info.news);
             }
 
             if (!model.settings.self_update) {
@@ -162,7 +142,7 @@ let self_update = (model) => {
             }
 
             if (_.includes(process.argv[0], 'node')) {
-                debug('Running as a non-binary script, skipping self-update.');
+                ui.debug('Running as a non-binary script, skipping self-update.');
                 return Promise.resolve(model);
             } else if (model.version == model.latest) {
                 return Promise.resolve(model);
@@ -185,7 +165,7 @@ let self_update = (model) => {
                 });
             }
         }).catch(err => {
-            debug(`\nCould not reach endpoint ${model.client.endpoint} during self_update`);
+            ui.debug(`\nCould not reach endpoint ${model.client.endpoint} during self_update`);
             return Promise.resolve(model);
         });
     } else {
@@ -225,22 +205,29 @@ let capture_stdin = async(model) => {
     return Promise.resolve(model);
 };
 
-let handle_args = (model) => {
+let handle_args = async(model) => {
 
+    // model.argv = _.clone(process.argv);
     let items = _.drop(process.argv, 2);
+
     let start_cmd = false;
     let last = {
         token: false,
         environment: false,
-        endpoint: false
+        endpoint: false,
+        source: false,
+        destination: false
     }
-    _.each(items, (item) => {
+
+    ui.debug('\n');
+
+    _.each(items, async(item) => {
         if (!start_cmd) {
             if (_.startsWith(item, '-')) {
                 if ((item === '-t' || item === '--token') && !process.env.KEYS_TOKEN) {
                     last.token = true;
                 } else if (item === '-v' || item === '--verbose') {
-                    model.debug = true;
+                    ui.set_debug(true);
                 } else if (item === '-e' || item === '--environment') {
                     last.environment = true;
                 } else if (item === '-c' || item === '--clean') {
@@ -251,6 +238,10 @@ let handle_args = (model) => {
                     model.import = true;
                 } else if (item === '--register') {
                     model.fresh = true;
+                } else if (item === '-s' || item === '--source') {
+                    last.source = true;
+                } else if (item === '-d' || item === '--dest' || item === '--destination') {
+                    last.destination = true;
                 } else if (item === '--endpoint') {
                     last.endpoint = true;
                 } else if (item === '--reset') {
@@ -263,11 +254,19 @@ let handle_args = (model) => {
             } else if (last.environment) {
                 model.env_name = item;
                 last.environment = false;
+            } else if (last.source) {
+                last.source = false;
+                ui.debug(`Using source ${item}`);
+                model.source = liaison.get_source(item);
+            } else if (last.destination) {
+                last.destination = false;
+                ui.debug(`Using destination ${item}`);
+                model.destination = liaison.get_destination(item);
             } else if (last.endpoint) {
                 if (validURL(item)) {
                     model.client.endpoint = item;
                 } else {
-                    die('\nERROR'.red, '--endpoint requires a valid URL argument.');
+                    ui.die('\nError'.red, '--endpoint requires a valid URL argument.');
                 }
                 last.endpoint = false;
             } else {
@@ -282,39 +281,43 @@ let handle_args = (model) => {
     _.each(last, (v, k) => {
         if (v) {
             if (k == 'token') {
-                die('\nERROR'.red, `--${k} requires an argument ( or set KEYS_TOKEN in local environment)`);
+                ui.die('\nError'.red, `--${k} requires an argument ( or set KEYS_TOKEN in local environment)`);
             }
-            die('\nERROR'.red, `--${k} requires an argument`);
+            ui.die('\nError'.red, `--${k} requires an argument`);
         }
     });
 
     if (model.reset) {
-        unstore_creds(model);
+        await unstore_creds(model);
         model.settings = _.cloneDeep(default_settings);
-        update_config(model);
-        info('');
-        info('Configuration Reset'.yellow);
-        model.spinner.stop();
-        return Promise.resolve(null);
+        await update_config(model);
+        ui.info('Success'.green + ' configuration reset to default');
+        process.exit(1);
     } else {
+
         model.cmd = _.join(model.cmd, ' ');
+
+        if (model.destination && model.cmd.trim().length > 0) {
+            ui.info('WARN'.yellow, 'Ignoring command', model.cmd.italic, `because we're doing a push to --destination ${model.destination.get_name()}`);
+        }
+
         let index = _.findIndex(model.args, (arg) => arg === '-t' || arg === '--token');
 
         if (index > -1) {
             if (process.env.KEYS_TOKEN) {
-                info('Using auth from KEYS_TOKEN environment variable'.grey);
+                ui.info('Using auth from KEYS_TOKEN environment variable'.grey);
                 model.token = process.env.KEYS_TOKEN;
             } else {
                 if (model.args.length > index + 1) {
                     model.token = model.args[index + 1];
                 } else {
-                    die("-t|--token requires token as an argument (or KEYS_TOKEN environment variable set)");
+                    ui.die("-t|--token requires token as an argument (or KEYS_TOKEN environment variable set)");
                 }
             }
         }
 
         if (process.env.KEYS_ENDPOINT) {
-            debug('Using endpoint ' + process.env.KEYS_ENDPOINT + ' from KEYS_ENDPOINT environment variable')
+            ui.debug('Using endpoint ' + process.env.KEYS_ENDPOINT + ' from KEYS_ENDPOINT environment variable')
             model.client.endpoint = process.env.KEYS_ENDPOINT;
         }
 
@@ -392,12 +395,12 @@ let ask_creds = async(model) => {
 
     if (model) {
         if (model.token) {
-            debug('Auth token provided, skipping credential prompt.');
+            ui.debug('Auth token provided, skipping credential prompt.');
             model.creds.token = model.token;
         } else {
 
             if (model.fresh) {
-                info('');
+                ui.info('');
                 let ask = 'Set up a new repository? [Y/n]';
                 let register_options = {
                     output: process.stderr,
@@ -406,7 +409,7 @@ let ask_creds = async(model) => {
                 let answer = await promptly.prompt(ask, register_options);
                 if (answer === 'Y' || answer === 'y') {
 
-                    info('Creating new account...'.grey);
+                    ui.info('Creating new account...'.grey);
 
                     let email_options = {
                         output: process.stderr
@@ -458,25 +461,25 @@ let ask_creds = async(model) => {
                             method: 'POST'
                         };
                         return request(options).then((body) => {
-                            info('Created Account'.green, `at ${model.client.endpoint}`.grey);
+                            ui.info('Created Account'.green, `at ${model.client.endpoint}`.grey);
                             model.settings.registered = true;
                             model.creds.email = email;
                             model.creds.passwd = passwd;
                             model.settings.email = model.creds.email;
                             return Promise.resolve(model);
                         }).catch((err) => {
-                            error(err);
+                            ui.error(err);
                             return Promise.resolve(null);
                         });
 
                     } else {
-                        error('Passwords did not match');
+                        ui.error('Passwords did not match');
                         return Promise.resolve(null);
                     }
 
                 } else {
                     model.fresh = false;
-                    info('Log into existing account...'.grey);
+                    ui.info('Log into existing account...'.grey);
                 }
             }
 
@@ -528,20 +531,18 @@ let import_env = async(model) => {
             let lines = model.input.split('\n');
             _.each(lines, (line) => {
                 if (line.replace(/\s/g, '').length) {
+                    let r_line = /([^=]+)=['"]?(.+)['"]?/;
+                    let match = r_line.exec(line);
+                    if (match.length !== 3) {
+                        ui.info('Skipping line'.yellow, 'bad format: ' + line);
+                    }
                     let parts = line.split('=');
-                    if (parts.length != 2) {
-                        info('Skipping line'.yellow, 'bad format: ' + line);
-                    } else {
-                        let key = parts[0];
-                        let val = parts[1];
-                        if ('\'"'.includes(val[0]) && val.slice(-1) === val[0]) {
-                            val = val.substring(1, val.length - 1);
-                        }
-                        import_vars[key] = {
-                            value: val,
-                            updated: moment().unix(),
-                            by: model.user.id
-                        }
+                    let key = match[1];
+                    let val = match[2];
+                    import_vars[key] = {
+                        value: val,
+                        updated: moment().unix(),
+                        by: model.user.id
                     }
                 }
             });
@@ -565,10 +566,10 @@ let import_env = async(model) => {
         };
         return request(options).then((body) => {
             let action = model.create_env ? 'Created' : 'Updated';
-            info(action.yellow, model.env_name.bold, `with ${_.size(import_vars)} variables from stdin`);
+            ui.info(action.green, model.env_name.bold, `with ${_.size(import_vars)} variables from stdin`);
             return Promise.resolve(null);
         }).catch((err) => {
-            error(err);
+            ui.error(err);
             return Promise.resolve(null);
         });
     } else {
@@ -578,7 +579,7 @@ let import_env = async(model) => {
 
 let update_stats = async(model) => {
 
-    if (!model.local && model && model.selected && !model.creds.token) {
+    if (model && !model.local && model.selected && !model.creds.token && model.source === 'keys') {
 
         let body = {
             id: model.selected,
@@ -592,7 +593,7 @@ let update_stats = async(model) => {
             json: body,
             method: 'POST'
         };
-        request(options).catch(err => error(err));
+        request(options).catch(err => ui.error(err));
     }
 
     return Promise.resolve(model);
@@ -601,6 +602,15 @@ let update_stats = async(model) => {
 let ask_env = async(model) => {
 
     if (model) {
+
+        if (model.source !== 'keys') {
+            model.user = {
+                envs: await model.source.envs()
+            }
+            model.selected = await ui.choose(model.user.envs);
+            return Promise.resolve(model);
+        }
+
         if (model.token) {
             model.selected = _.findKey(model.user.envs, () => true);
         } else if (model.env_name) {
@@ -613,67 +623,26 @@ let ask_env = async(model) => {
                 if (model.import) {
                     model.create_env = true;
                 } else {
-                    info('NotFound'.yellow, model.env_name);
+                    ui.info('NotFound'.yellow, model.env_name);
                 }
             }
         }
 
         if (model.selected) {
             if (!model.import) {
-                info(`Loading environment: ${model.user.envs[model.selected].name}`);
+                ui.info(`Loading environment: ${model.user.envs[model.selected].name}`);
             }
             return Promise.resolve(model);
         } else {
             if (!model.import) {
-                let options = {};
-                let envs_all = _.map(model.user.envs, (env) => {
-                    return env;
-                });
-                let envs = {
-                    dev: _.filter(envs_all, { stage: 'dev' }),
-                    test: _.filter(envs_all, { stage: 'test' }),
-                    qa: _.filter(envs_all, { stage: 'qa' }),
-                    prod: _.filter(envs_all, { stage: 'prod' })
-                }
-                let choices = {
-                    dev: 1,
-                    test: 1 + envs.dev.length,
-                    qa: 1 + envs.dev.length + envs.test.length,
-                    prod: 1 + envs.dev.length + envs.test.length + envs.qa.length
-                }
-                let env_choice = {};
-                let rows = [];
-                for (let i = 0; i < envs_all.length; i++) {
-                    let row = {}
-                    _.each(['dev', 'test', 'qa', 'prod'], (stage) => {
-                        let next = _.pullAt(envs[stage], [0]);
-                        if (next.length > 0 && next[0]) {
-                            row[stage] = `[${choices[stage]}] ${next[0].name}\n`;
-                            env_choice['' + choices[stage]++] = next[0].id;
-                        }
-                    });
-                    if (_.keys(row).length > 0) {
-                        rows.push(row);
-                    }
-                }
-
-                let columns = columnify(rows);
-                info(columns);
-                info();
-                text = `Load Environment #: `;
-                let env_index = await promptly.prompt(text, options);
-                if (env_index > 0 && _.keys(env_choice).length >= env_index) {
-                    model.selected = env_choice[env_index];
-                    return Promise.resolve(model);
-                } else {
-                    error('Invalid Selection');
-                }
+                model.selected = await ui.choose(model.user.envs);
+                return Promise.resolve(model);
             } else {
                 if (model.create_env) {
                     return Promise.resolve(model);
                 } else {
-                    info('Use', '-e name'.yellow, 'with', '-i'.yellow, 'to specify an environment to create/update');
-                    info('  with the lines from stdin (name=value)');
+                    ui.info('Use', '-e name'.yellow, 'with', '-i'.yellow, 'to specify an environment to create/update');
+                    ui.info('  with the lines from stdin (name=value)');
                     return Promise.resolve(null);
                 }
             }
@@ -697,13 +666,13 @@ let execute = (model) => {
         });
 
         if (_.trim(model.cmd).length < 1) {
-            info('');
-            info('Typical usage is:');
-            info('  keys [command you want to run with the environment variables loaded]');
-            info('');
-            info('No command was provided, exiting. ');
+            ui.info('');
+            ui.info('Typical usage is:');
+            ui.info('  keys [command you want to run with the environment variables loaded]');
+            ui.info('');
+            ui.info('No command was provided, exiting. ');
         } else {
-            info('Executing'.green, model.cmd);
+            ui.info('Executing'.green, model.cmd);
             spawn(model.cmd, {
                 stdio: 'inherit',
                 shell: shell,
@@ -720,7 +689,7 @@ let login = async(model) => {
     if (model) {
         if (model.local) {
             return load_cache(model);
-        } else {
+        } else if (model.source === 'keys') {
             let req = {
                 client: model.client
             };
@@ -764,7 +733,7 @@ let login = async(model) => {
                         json: req
                     }).then((body) => {
 
-                        info('AuthSuccess'.green, `for ${model.creds.email}`.grey);
+                        ui.info('AuthSuccess'.green, `for ${model.creds.email}`.grey);
                         _.merge(model, body);
                         model.settings.registered = true;
 
@@ -773,12 +742,12 @@ let login = async(model) => {
 
                     }).catch(err => {
                         console.error(err.message);
-                        die('AuthFailed', 'Invalid 2FA Code');
+                        ui.die('AuthFailed', 'Invalid 2FA Code');
                     });
 
                 } else {
                     let auth_for = model.creds.token ? 'token' : model.creds.email;
-                    info('AuthSuccess'.green, `for ${auth_for}`.grey);
+                    ui.info('AuthSuccess'.green, `for ${auth_for}`.grey);
                     model.settings.registered = true;
                     _.merge(model, body);
                     cache_model(model);
@@ -793,15 +762,17 @@ let login = async(model) => {
                 }
                 if (err.statusCode === 401) {
                     if (model.token) {
-                        die('AuthFailed', 'Invalid Token');
+                        ui.die('AuthFailed', 'Invalid Token');
                     } else {
-                        die('AuthFailed', 'Bad Username/Password');
+                        ui.die('AuthFailed', 'Bad Username/Password');
                     }
                 }
-                error('WARN'.yellow, `Failure to reach ${model.client.endpoint}, entering --local mode.`)
+                ui.error('WARN'.yellow, `Failure to reach ${model.client.endpoint}, entering --local mode.`)
                 model.local = true;
                 return load_cache(model);
             });
+        } else {
+            return Promise.resolve(model);
         }
     } else {
         return Promise.resolve(model);
@@ -810,7 +781,7 @@ let login = async(model) => {
 
 let decrypt_model = (model) => {
 
-    if (model) {
+    if (model && model.source === 'keys') {
         let passwd = _.has(model.creds, 'token') ? model.creds.token : model.creds.passwd;
         // let org_key_ct = _.has(model, 'org_key_ct') ? model.org_key_ct : model.user.org_keys_ct[model.org.id];
 
@@ -849,7 +820,7 @@ let decrypt_model = (model) => {
     return Promise.resolve(model);
 };
 
-let specials = (model) => {
+let specials = async(model) => {
 
     if (model) {
         let parts = _.chain(model.cmd).toLower().words().value();
@@ -860,6 +831,28 @@ let specials = (model) => {
                 model.cmd += ` -e ${key}`;
             });
         }
+
+        // for liaisons to lazy-fetch the specific env once chosen
+        if (model.source !== 'keys') {
+            model.user.envs[model.selected].vars = await model.source.env(model.selected);
+        }
+
+
+        if (model.destination) {
+            ui.info(`\nChoose the ${model.destination.get_name()} ${model.destination.get_env_name()} to push ${model.user.envs[model.selected].name} (${_.keys(model.user.envs[model.selected].vars).length} vars) to:`.green);
+            let envs = await model.destination.envs(model);
+            let dest = await ui.choose(envs, 'Choose Destination #: ');
+
+            let message = 'Pushing ' + model.user.envs[model.selected].name.bold + ` to ${model.destination.get_name()} ${model.destination.get_env_name()} ` + dest.bold;
+            const spinner = ora(message).start();
+            // let spin = new spinner(`%s Pushing ` + model.user.envs[model.selected].name.bold + ` to ${model.destination.get_name()} ${model.destination.get_env_name()} ` + dest.bold);
+            // spin.setSpinnerString(18);
+            // spin.start();
+            let result = await model.destination.push(dest, model.user.envs[model.selected].vars, spinner);
+            spinner.stop();
+            ui.info('\nSuccess'.green, `Updated ${model.destination.get_name()} ${model.destination.get_env_name()} ${dest}`);
+            process.exit(1);
+        }
     }
 
     return Promise.resolve(model);
@@ -867,9 +860,7 @@ let specials = (model) => {
 
 let main = async() => {
 
-    model.spinner = new spinner('%s Initializing ' + 'keys'.green + ' ');
-    model.spinner.setSpinnerString(18);
-    model.spinner.start();
+    model.spinner = ora('Initializing\n').start();
 
     load_config(model)
         .then(handle_args)
@@ -888,7 +879,7 @@ let main = async() => {
         .then(specials)
         .then(execute)
         .catch((e) => {
-            model.debug ? console.trace(e) : console.error(e.message.red);
+            ui.is_debug ? console.trace(e) : console.error(e.message.red);
         });
 };
 

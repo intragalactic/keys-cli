@@ -1,6 +1,6 @@
 {
     "name": "keys-cli",
-    "version": "2.3.1",
+    "version": "2.4.0",
     "description": "The keys.cm cli. Load encrypted environment variables at runtime.",
     "homepage": "https://keys.cm/",
     "bugs": {
@@ -31,7 +31,6 @@
     },
     "dependencies": {
         "await-exec": "^0.1.2",
-        "cli-spinner": "^0.2.10",
         "colors": "^1.4.0",
         "columnify": "^1.5.4",
         "cryptico": "^1.0.2",
@@ -39,6 +38,7 @@
         "keytar": "^5.4.0",
         "lodash": "^4.17.15",
         "moment": "^2.24.0",
+        "ora": "^4.0.4",
         "password-validator": "^5.0.3",
         "promptly": "^3.0.3",
         "request": "^2.88.2",

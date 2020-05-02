@@ -36,7 +36,7 @@ command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.3.1
+keys 2.4.0
 Loaded credentials from keychain
 AuthSuccess for user@example.com
 DEV                        TEST               PROD
@@ -75,6 +75,22 @@ This flag will run your command with _only_ the variables from the selected envi
 `-l | --local`
 Load encrypted data from local cache (at ~/.keys/cache.json) instead of logging into the remote repository. In normal
 mode this cache is used as a fallback in case the remote repository is inaccessible.
+
+`-s | --source [platform]`
+Load environments from `platform` instead of keys.cm.
+
+```bash
+keys -s heroku command # run command, using an environment from a heroku app
+```
+
+`-d | --destination [platform]`
+Specify a destination platform to push the source environment to. You will be prompted to select both the source
+and destination environments.
+
+```bash
+keys -d heroku # copy environment from keys.cm to a Heroku app
+keys -s heroku -d pivotal # copy an environment from a Heroku app to a Pivotal Cloud Foundry app
+```
 
 `-i | --import`
 Pipe lines of variables key=value into stdin to import variables to an environment specified by `-e`.
