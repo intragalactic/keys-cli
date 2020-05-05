@@ -25,6 +25,7 @@ const {
     execSync
 } = require('child_process');
 
+
 let default_settings = {
     default_environment: null,
     ask_everytime: false,
@@ -36,7 +37,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.4.0'
+        version: '2.4.1'
     },
     args: [],
     cmd: [],
@@ -58,7 +59,6 @@ process.on('SIGINT', function() {
     process.exit();
 });
 
-
 let validURL = (s) => {
     try {
         new URL(s);
@@ -75,8 +75,19 @@ let unstore_creds = (model) => {
 }
 
 let store_creds = (creds) => {
-    if (!model.creds.token) {
-        keytar.setPassword('keys.cm', creds.email, creds.passwd);
+    try {
+        if (!model.creds.token) {
+            let p = keytar.setPassword('keys.cm', creds.email, creds.passwd);
+            p.then((v) => {
+                ui.debug('\nStored credentials in keychain');
+            }).catch((e) => {
+                let platform = process.platform == 'darwin' ? 'OSX' : process.platform;
+                ui.error('\nWarn'.yellow, `Unable to store credentials in ${platform} keychain.`);
+                ui.error('Warn'.yellow, 'There is a problem with your keyring configuration. [Press Enter to Continue]');
+            });
+        }
+    } catch (e) {
+        console.error(e);
     }
 }
 
@@ -886,3 +897,26 @@ let main = async() => {
 if (require.main === module) {
     main();
 }
+
+let cli = {
+    default_settings: default_settings,
+    model: model,
+    load_config: load_config,
+    handle_args: handle_args,
+    self_update: self_update,
+    capture_stdin: capture_stdin,
+    print_intro: print_intro,
+    load_creds: load_creds,
+    ask_creds: ask_creds,
+    host_info: host_info,
+    login: login,
+    update_config: update_config,
+    decrypt_model: decrypt_model,
+    ask_env: ask_env,
+    update_stats: update_stats,
+    import_env: import_env,
+    specials: specials,
+    execute: execute
+}
+
+module.exports = cli;
