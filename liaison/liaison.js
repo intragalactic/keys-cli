@@ -2,24 +2,18 @@ const ui = require('../ui');
 
 const liaison = {
 
-    get_source: (platform) => {
+    get: (platform) => {
 
         switch (platform) {
             case 'heroku':
                 return require('./heroku');
+            case 'pivotal':
+            case 'pcf':
+            case 'cf':
+                return require('./pivotal');
             default:
-                ui.error('ERROR'.red, `Unknown source ${platform}`);
-                process.exit(1);
-        }
-    },
-
-    get_destination: (platform) => {
-
-        switch (platform) {
-            case 'heroku':
-                return require('./heroku');
-            default:
-                ui.error('ERROR'.red, `Unknown destination ${platform}`);
+                ui.error('ERROR'.red, `Unknown platform ${platform}`);
+                ui.info('Currently supported platforms: keys, heroku, pivotal');
                 process.exit(1);
         }
     }

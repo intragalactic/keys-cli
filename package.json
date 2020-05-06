@@ -1,8 +1,8 @@
 {
     "name": "keys-cli",
-    "version": "2.4.2",
-    "description": "The keys.cm cli. Load encrypted environment variables at runtime.",
-    "homepage": "https://keys.cm/",
+    "version": "2.5.0",
+    "description": "Load encrypted environment variables at runtime, and manage environments.",
+    "homepage": "https://www.keys.cm/",
     "bugs": {
         "url": "https://github.com/intragalactic/keys-cli/issues",
         "email": "ehlo@keys.cm"
@@ -15,7 +15,7 @@
     "bin": {
         "keys": "keys.js"
     },
-    "keywords": [],
+    "keywords": ["environment", "variables", "env", "vars", "cli", "security"],
     "author": "ehlo@keys.cm",
     "license": "GPL-3.0-only",
     "private": false,
@@ -34,6 +34,7 @@
     },
     "dependencies": {
         "await-exec": "^0.1.2",
+        "cli-progress": "^3.8.2",
         "colors": "^1.4.0",
         "columnify": "^1.5.4",
         "cryptico": "^1.0.2",
@@ -41,9 +42,11 @@
         "keytar": "^5.4.0",
         "lodash": "^4.17.15",
         "moment": "^2.24.0",
+        "node-vault": "^0.9.15",
         "ora": "^4.0.4",
         "password-validator": "^5.0.3",
         "promptly": "^3.0.3",
+        "request": "^2.88.2",
         "request-promise": "^4.2.5",
         "sha3": "^2.1.1",
         "sjcl": "^1.0.8",

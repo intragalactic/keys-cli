@@ -3,8 +3,11 @@ const ui = require('../ui');
 const {
     execSync
 } = require('child_process');
+const progressbar = require('cli-progress');
 
-const heroku = {
+const liaison = {
+
+    endpoint: null,
 
     get_name: () => {
         return 'heroku';
@@ -15,6 +18,11 @@ const heroku = {
     },
 
     envs: async(model) => {
+
+        if (liaison.endpoint) {
+            ui.info('WARN'.yellow, `Ignoring --endpoint ${liaison.endpoint}`);
+            ui.info('WARN'.yellow, 'heroku cli doesn\'t support custom endpoint');
+        }
 
         let envs = {};
 
@@ -81,17 +89,22 @@ const heroku = {
     push: async(envid, vars, spinner) => {
 
         ui.debug('');
+
+        const progress = new progressbar.SingleBar({ stream: process.stderr, }, progressbar.Presets.rect);
+        progress.start(_.keys(vars).length, 0);
+
         _.each(vars, async(v, k) => {
-            if (spinner && !ui.is_debug) {
-                spinner.render();
-            }
+
             let result = execSync(`heroku config:set -a ${envid} ${k}='${v.value}'`, { shell: true, stdio: ['pipe', 'pipe', 'ignore'] });
             result = result.toString();
-            ui.debug(`Set ${k}`);
+            progress.increment();
+            ui.debug(` Set ${k}`);
         });
+
+        progress.stop();
 
         return true;
     }
 }
 
-module.exports = heroku;
+module.exports = liaison;

@@ -37,7 +37,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.4.2'
+        version: '2.4.3'
     },
     args: [],
     cmd: [],
@@ -230,6 +230,8 @@ let handle_args = async(model) => {
         destination: false
     }
 
+    let endpoint = null;
+
     ui.debug('\n');
 
     _.each(items, async(item) => {
@@ -268,14 +270,14 @@ let handle_args = async(model) => {
             } else if (last.source) {
                 last.source = false;
                 ui.debug(`Using source ${item}`);
-                model.source = liaison.get_source(item);
+                model.source = liaison.get(item);
             } else if (last.destination) {
                 last.destination = false;
                 ui.debug(`Using destination ${item}`);
-                model.destination = liaison.get_destination(item);
+                model.destination = liaison.get(item);
             } else if (last.endpoint) {
                 if (validURL(item)) {
-                    model.client.endpoint = item;
+                    endpoint = item;
                 } else {
                     ui.die('\nError'.red, '--endpoint requires a valid URL argument.');
                 }
@@ -289,7 +291,17 @@ let handle_args = async(model) => {
         }
     });
 
-    _.each(last, (v, k) => {
+    if (endpoint) {
+        if (model.source === 'keys') {
+            model.client.endpoint = endpoint;
+        } else {
+            model.source.endpoint = endpoint;
+        }
+    }
+
+    if (model.des)
+
+        _.each(last, (v, k) => {
         if (v) {
             if (k == 'token') {
                 ui.die('\nError'.red, `--${k} requires an argument ( or set KEYS_TOKEN in local environment)`);
@@ -544,7 +556,7 @@ let import_env = async(model) => {
                 if (line.replace(/\s/g, '').length) {
                     let r_line = /([^=]+)=['"]?(.+)['"]?/;
                     let match = r_line.exec(line);
-                    if (match.length !== 3) {
+                    if (!match || match.length !== 3) {
                         ui.info('Skipping line'.yellow, 'bad format: ' + line);
                     }
                     let parts = line.split('=');

@@ -1,5 +1,7 @@
 const platform = {
 
+    endpoint: null,
+
     // descriptive name of the platform
     get_name: () => {
         return 'heroku';

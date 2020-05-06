@@ -39,7 +39,7 @@ let ui = {
     },
 
     choose: async(envs_map, message) => {
-        let options = {};
+
         let envs_all = _.map(envs_map, (env) => {
             return env;
         });
@@ -70,12 +70,12 @@ let ui = {
         }
 
         let columns = columnify(rows, {
-            columnSplitter: ' | '
+            columnSplitter: '    '
         });
         ui.info(columns);
         ui.info();
         text = message ? message : 'Load Environment #: ';
-        let env_index = await promptly.prompt(text, options);
+        let env_index = await promptly.prompt(text, { output: process.stderr });
         if (env_index > 0 && _.keys(env_choice).length >= env_index) {
             return env_choice[env_index];
             // return Promise.resolve(model);
