@@ -31,13 +31,13 @@ let default_settings = {
     ask_everytime: false,
     self_update: false,
     registered: false,
-    endpoint: 'https://keys.cm'
+    endpoint: 'https://api.keys.cm'
 };
 
 let model = {
     debug: false,
     client: {
-        version: '2.4.1'
+        version: '2.4.2'
     },
     args: [],
     cmd: [],
