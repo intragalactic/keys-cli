@@ -37,7 +37,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.4.3'
+        version: '2.5.0'
     },
     args: [],
     cmd: [],
