@@ -1,0 +1,29 @@
+env:
+  browser: true
+  es6: true
+  amd: true
+  jquery: true
+extends: 'eslint:recommended'
+parserOptions:
+  ecmaVersion: 2017
+  sourceType: module
+globals:
+  M: false
+  ecrypt: false
+  process: false
+  module: false
+  gdprCookieNotice: false
+rules:
+  indent:
+    - error
+    - 4
+  linebreak-style:
+    - error
+    - unix
+  quotes:
+    - error
+    - single
+  semi:
+    - error
+    - always
+  no-console: off

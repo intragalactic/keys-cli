@@ -21,8 +21,7 @@ const liaison = require('./liaison/liaison');
 
 const {
     exec,
-    spawn,
-    execSync
+    spawn
 } = require('child_process');
 
 
@@ -37,7 +36,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.5.0'
+        version: '2.5.1'
     },
     args: [],
     cmd: [],
@@ -72,30 +71,36 @@ let unstore_creds = (model) => {
     if (model.settings.email) {
         keytar.deletePassword('keys.cm', model.settings.email);
     }
-}
+};
 
 let store_creds = (creds) => {
     try {
         if (!model.creds.token) {
             let p = keytar.setPassword('keys.cm', creds.email, creds.passwd);
-            p.then((v) => {
+            p.then(() => {
                 ui.debug('\nStored credentials in keychain');
             }).catch((e) => {
-                let platform = process.platform == 'darwin' ? 'OSX' : process.platform;
-                ui.error('\nWarn'.yellow, `Unable to store credentials in ${platform} keychain.`);
-                ui.error('Warn'.yellow, 'There is a problem with your keyring configuration. [Press Enter to Continue]');
+                let platform = process.platform === 'darwin' ? 'OSX' : process.platform;
+                ui.error('\nWARN'.yellow, `Unable to store credentials in ${platform} keychain. [Press Enter to Continue]`);
+                ui.debug(e.message);
             });
         }
     } catch (e) {
         console.error(e);
     }
-}
+};
 
 let load_creds = async(model) => {
     if (model) {
         if (!model.token) {
             if (model.settings.email) {
-                let creds = await keytar.findCredentials('keys.cm');
+                let creds = null;
+                try {
+                    creds = await keytar.findCredentials('keys.cm');
+                }catch(e){
+                    ui.info('WARN'.yellow, 'Unable to load credentials from keychain', 'Run with -v for more info.'.gray);
+                    ui.debug(e.message);
+                }
                 if (creds) {
                     let match = _.find(creds, {
                         'account': model.settings.email
@@ -107,14 +112,14 @@ let load_creds = async(model) => {
                     }
                 }
             } else {
-                ui.debug("Skipping credentials load from platform, no default account set");
+                ui.debug('Skipping credentials load from platform, no default account set');
             }
         } else {
-            ui.debug("Skipping credentials load from platform, using token instead.");
+            ui.debug('Skipping credentials load from platform, using token instead.');
         }
     }
     return Promise.resolve(model);
-}
+};
 
 let print_intro = (model) => {
 
@@ -141,7 +146,7 @@ let self_update = (model) => {
     if (model) {
         return request.get(model.client.endpoint + '/info').then((body) => {
 
-            let info = JSON.parse(body)
+            let info = JSON.parse(body);
             model.latest = info.version;
 
             if (_.has(info, 'news')) {
@@ -155,7 +160,7 @@ let self_update = (model) => {
             if (_.includes(process.argv[0], 'node')) {
                 ui.debug('Running as a non-binary script, skipping self-update.');
                 return Promise.resolve(model);
-            } else if (model.version == model.latest) {
+            } else if (model.version === model.latest) {
                 return Promise.resolve(model);
             } else {
 
@@ -177,6 +182,7 @@ let self_update = (model) => {
             }
         }).catch(err => {
             ui.debug(`\nCould not reach endpoint ${model.client.endpoint} during self_update`);
+            ui.debug(err.message);
             return Promise.resolve(model);
         });
     } else {
@@ -197,7 +203,7 @@ let update_config = (model) => {
 let cache_model = (model) => {
     if (model) {
         let file = process.env.HOME + '/.keys/cache.json';
-        let cache = {}
+        let cache = {};
         cache.user = _.cloneDeep(model.user);
         cache.orgs = _.cloneDeep(model.orgs);
         cache.org = _.cloneDeep(model.org);
@@ -228,7 +234,7 @@ let handle_args = async(model) => {
         endpoint: false,
         source: false,
         destination: false
-    }
+    };
 
     let endpoint = null;
 
@@ -299,11 +305,9 @@ let handle_args = async(model) => {
         }
     }
 
-    if (model.des)
-
-        _.each(last, (v, k) => {
+    _.each(last, (v, k) => {
         if (v) {
-            if (k == 'token') {
+            if (k === 'token') {
                 ui.die('\nError'.red, `--${k} requires an argument ( or set KEYS_TOKEN in local environment)`);
             }
             ui.die('\nError'.red, `--${k} requires an argument`);
@@ -334,19 +338,30 @@ let handle_args = async(model) => {
                 if (model.args.length > index + 1) {
                     model.token = model.args[index + 1];
                 } else {
-                    ui.die("-t|--token requires token as an argument (or KEYS_TOKEN environment variable set)");
+                    ui.die('-t|--token requires token as an argument (or KEYS_TOKEN environment variable set)');
                 }
             }
         }
 
         if (process.env.KEYS_ENDPOINT) {
-            ui.debug('Using endpoint ' + process.env.KEYS_ENDPOINT + ' from KEYS_ENDPOINT environment variable')
+            ui.debug('Using endpoint ' + process.env.KEYS_ENDPOINT + ' from KEYS_ENDPOINT environment variable');
             model.client.endpoint = process.env.KEYS_ENDPOINT;
+        }
+
+        if ( _.trim(model.cmd).length < 1 && !model.destination) {
+            ui.info('WARN'.yellow, 'No command was provided');
+            ui.info('');
+            ui.info('Typical actions are:');
+            ui.info('  keys [command]', '# run command with env vars loaded'.gray);
+            ui.info('  keys -d [platform]', '# push env vars to destination'.gray);
+            ui.info('');
+
+            process.exit(0);
         }
 
         return Promise.resolve(model);
     }
-}
+};
 
 let load_cache = (model) => {
     if (model) {
@@ -360,7 +375,7 @@ let load_cache = (model) => {
             console.error('No cache to load from, sorry.');
         }
     }
-}
+};
 
 let load_config = (model) => {
 
@@ -424,13 +439,19 @@ let ask_creds = async(model) => {
 
             if (model.fresh) {
                 ui.info('');
-                let ask = 'Set up a new repository? [Y/n]';
+                let ask = '[1] Login to an existing account\n';
+                ask += '[2] Create a repository on https://keys.cm\n';
+                // ask += '[3] Create a local repository in ~/.keys to store encrypted environments\n';
+                ask += '\nChoose an option: ';
                 let register_options = {
                     output: process.stderr,
-                    default: 'Y'
+                    default: '1'
                 };
                 let answer = await promptly.prompt(ask, register_options);
-                if (answer === 'Y' || answer === 'y') {
+                if (answer === '3'){
+                    ui.info('Creating local repository is coming soon...'.grey);
+                     process.exit();
+                }else if (answer === '2' ) {
 
                     ui.info('Creating new account...'.grey);
 
@@ -483,7 +504,7 @@ let ask_creds = async(model) => {
                             json: body,
                             method: 'POST'
                         };
-                        return request(options).then((body) => {
+                        return request(options).then(() => {
                             ui.info('Created Account'.green, `at ${model.client.endpoint}`.grey);
                             model.settings.registered = true;
                             model.creds.email = email;
@@ -502,7 +523,7 @@ let ask_creds = async(model) => {
 
                 } else {
                     model.fresh = false;
-                    ui.info('Log into existing account...'.grey);
+                    ui.info('Log into existing account at https://keys.cm ...'.grey);
                 }
             }
 
@@ -559,21 +580,20 @@ let import_env = async(model) => {
                     if (!match || match.length !== 3) {
                         ui.info('Skipping line'.yellow, 'bad format: ' + line);
                     }
-                    let parts = line.split('=');
                     let key = match[1];
                     let val = match[2];
                     import_vars[key] = {
                         value: val,
                         updated: moment().unix(),
                         by: model.user.id
-                    }
+                    };
                 }
             });
         }
 
         let body = {
             vars_ct: crypto.encrypt(model.user.org_keys[model.user.org], JSON.stringify(import_vars))
-        }
+        };
         if (model.create_env) {
             model.selected = uuid();
             body.id = model.selected;
@@ -587,7 +607,7 @@ let import_env = async(model) => {
             json: body,
             method: 'POST'
         };
-        return request(options).then((body) => {
+        return request(options).then(() => {
             let action = model.create_env ? 'Created' : 'Updated';
             ui.info(action.green, model.env_name.bold, `with ${_.size(import_vars)} variables from stdin`);
             return Promise.resolve(null);
@@ -598,7 +618,7 @@ let import_env = async(model) => {
     } else {
         return Promise.resolve(model);
     }
-}
+};
 
 let update_stats = async(model) => {
 
@@ -608,7 +628,7 @@ let update_stats = async(model) => {
             id: model.selected,
             accessed: moment().unix(),
             selected: true
-        }
+        };
 
         let options = {
             uri: model.client.endpoint + '/env/update',
@@ -629,7 +649,7 @@ let ask_env = async(model) => {
         if (model.source !== 'keys') {
             model.user = {
                 envs: await model.source.envs()
-            }
+            };
             model.selected = await ui.choose(model.user.envs);
             return Promise.resolve(model);
         }
@@ -676,7 +696,7 @@ let ask_env = async(model) => {
 let execute = (model) => {
 
     if (model) {
-        let env = {}
+        let env = {};
         let shell = false;
 
         if (!model.clean) {
@@ -751,7 +771,7 @@ let login = async(model) => {
                     req = {
                         user: body['user'],
                         code: code
-                    }
+                    };
                     return request.post(model.client.endpoint + '/totp/login', {
                         json: req
                     }).then((body) => {
@@ -790,7 +810,7 @@ let login = async(model) => {
                         ui.die('AuthFailed', 'Bad Username/Password');
                     }
                 }
-                ui.error('WARN'.yellow, `Failure to reach ${model.client.endpoint}, entering --local mode.`)
+                ui.error('WARN'.yellow, `Failure to reach ${model.client.endpoint}, entering --local mode.`);
                 model.local = true;
                 return load_cache(model);
             });
@@ -871,7 +891,7 @@ let specials = async(model) => {
             // let spin = new spinner(`%s Pushing ` + model.user.envs[model.selected].name.bold + ` to ${model.destination.get_name()} ${model.destination.get_env_name()} ` + dest.bold);
             // spin.setSpinnerString(18);
             // spin.start();
-            let result = await model.destination.push(dest, model.user.envs[model.selected].vars, spinner);
+            await model.destination.push(dest, model.user.envs[model.selected].vars, spinner);
             spinner.stop();
             ui.info('\nSuccess'.green, `Updated ${model.destination.get_name()} ${model.destination.get_env_name()} ${dest}`);
             process.exit(1);
@@ -929,6 +949,6 @@ let cli = {
     import_env: import_env,
     specials: specials,
     execute: execute
-}
+};
 
 module.exports = cli;
