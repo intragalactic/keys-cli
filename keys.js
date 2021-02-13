@@ -18,6 +18,8 @@ const ora = require('ora');
 const URL = require('url').URL;
 const ui = require('./ui');
 const liaison = require('./liaison/liaison');
+const temp = require('temp');
+const child_process = require('child_process');
 
 const {
     exec,
@@ -54,7 +56,7 @@ let model = {
 // let stdout = process.stdout;
 // process.stdout.write = process.stderr.write;
 
-process.on('SIGINT', function() {
+process.on('SIGINT', function () {
     process.exit();
 });
 
@@ -90,14 +92,14 @@ let store_creds = (creds) => {
     }
 };
 
-let load_creds = async(model) => {
+let load_creds = async (model) => {
     if (model) {
         if (!model.token) {
-            if (model.settings.email) {
+            if (model.settings.email || model.settings.local) {
                 let creds = null;
                 try {
                     creds = await keytar.findCredentials('keys.cm');
-                }catch(e){
+                } catch (e) {
                     ui.info('WARN'.yellow, 'Unable to load credentials from keychain', 'Run with -v for more info.'.gray);
                     ui.debug(e.message);
                 }
@@ -164,7 +166,7 @@ let self_update = (model) => {
                 return Promise.resolve(model);
             } else {
 
-                return exec('uname', function(error, stdout) {
+                return exec('uname', function (error, stdout) {
                     if (error) throw error;
                     let uname = _.trim(_.toLower(stdout));
                     let myself = null;
@@ -211,9 +213,10 @@ let cache_model = (model) => {
             encoding: 'utf-8'
         });
     }
+    return Promise.resolve(model);
 };
 
-let capture_stdin = async(model) => {
+let capture_stdin = async (model) => {
     if (model) {
         await get_stdin().then(str => {
             model.input = str;
@@ -222,7 +225,7 @@ let capture_stdin = async(model) => {
     return Promise.resolve(model);
 };
 
-let handle_args = async(model) => {
+let handle_args = async (model) => {
 
     // model.argv = _.clone(process.argv);
     let items = _.drop(process.argv, 2);
@@ -240,7 +243,7 @@ let handle_args = async(model) => {
 
     ui.debug('\n');
 
-    _.each(items, async(item) => {
+    _.each(items, async (item) => {
         if (!start_cmd) {
             if (_.startsWith(item, '-')) {
                 if ((item === '-t' || item === '--token') && !process.env.KEYS_TOKEN) {
@@ -348,7 +351,7 @@ let handle_args = async(model) => {
             model.client.endpoint = process.env.KEYS_ENDPOINT;
         }
 
-        if ( _.trim(model.cmd).length < 1 && !model.destination) {
+        if (_.trim(model.cmd).length < 1 && !model.destination && !model.fresh && !model.import) {
             ui.info('WARN'.yellow, 'No command was provided');
             ui.info('');
             ui.info('Typical actions are:');
@@ -400,14 +403,14 @@ let load_config = (model) => {
 
         model.client.endpoint = model.settings.endpoint;
 
-        if (!model.settings.registered) {
+        if (!model.settings.registered && !model.settings.local) {
             model.fresh = true;
         }
     }
     return Promise.resolve(model);
 };
 
-let host_info = async(model) => {
+let host_info = async (model) => {
 
     if (model) {
         model.client.type = 'default';
@@ -429,7 +432,7 @@ let host_info = async(model) => {
     return Promise.resolve(model);
 };
 
-let ask_creds = async(model) => {
+let ask_creds = async (model) => {
 
     if (model) {
         if (model.token) {
@@ -441,17 +444,53 @@ let ask_creds = async(model) => {
                 ui.info('');
                 let ask = '[1] Login to an existing account\n';
                 ask += '[2] Create a repository on https://keys.cm\n';
-                // ask += '[3] Create a local repository in ~/.keys to store encrypted environments\n';
+                ask += '[3] Create a local repository in $HOME/.keys\n';
                 ask += '\nChoose an option: ';
                 let register_options = {
                     output: process.stderr,
                     default: '1'
                 };
                 let answer = await promptly.prompt(ask, register_options);
-                if (answer === '3'){
-                    ui.info('Creating local repository is coming soon...'.grey);
-                     process.exit();
-                }else if (answer === '2' ) {
+                if (answer === '3') {
+                    ui.info('Creating local repository in ~/.keys'.grey);
+                    model.local = true;
+                    model.settings.local = true;
+
+                    let passwd_options = {
+                        silent: true,
+                        output: process.stderr
+                    };
+
+                    let passwd = await promptly.prompt('Create Password: ', passwd_options);
+                    let confirm = await promptly.prompt('Confirm Password: ', passwd_options);
+
+                    while (passwd !== confirm) {
+                        ui.info('\nPasswords did not match\n');
+                        passwd = await promptly.prompt('Create Password: ', passwd_options);
+                        confirm = await promptly.prompt('Confirm Password: ', passwd_options);
+                    }
+                    model.creds.passwd = passwd;
+                    let org_key = uuid();
+                    let keypair = cryptico.generateRSAKey(passwd, 1024);
+                    let public_key = cryptico.publicKeyString(keypair);
+                    let hash = new SHA3(512);
+                    hash.update(passwd);
+
+                    model.user = {
+                        email: null,
+                        name: process.env.USER || process.env.LOGNAME || 'local_user',
+                        passwd_hash: hash.digest('hex'),
+                        org: '1',
+                        id: '1',
+                        org_keys_ct: {
+                            '1': cryptico.encrypt(org_key, public_key).cipher
+                        },
+                        envs: {}
+                    };
+                    ui.info('Success'.green, 'Created local repository in ~/.keys'.grey);
+                    return update_config(model).then(cache_model);
+
+                } else if (answer === '2') {
 
                     ui.info('Creating new account...'.grey);
 
@@ -529,37 +568,39 @@ let ask_creds = async(model) => {
 
             if (!model.fresh && (!model.creds.email || !model.creds.passwd)) {
 
-                let text = 'Email: ';
-                let email_options = {
-                    output: process.stderr
-                };
+                if (!model.settings.local) {
+                    let text = 'Email: ';
+                    let email_options = {
+                        output: process.stderr
+                    };
+
+                    if (_.has(model.settings, 'email')) {
+                        text = `Email [${model.settings.email}]:`;
+                        email_options.default = model.settings.email;
+                    }
+
+                    try {
+                        model.creds.email = await promptly.prompt(text, email_options);
+                    } catch (e) {
+                        console.error(e);
+                        process.exit();
+                    }
+
+                    if (!model.creds.email || !model.creds.email.length) {
+                        model.creds.email = model.settings.email;
+                    } else {
+                        model.settings.email = model.creds.email;
+                        let file = process.env.HOME + '/.keys/settings.json';
+                        fs.writeFileSync(file, JSON.stringify(model.settings), {
+                            encoding: 'utf-8'
+                        });
+                    }
+                }
                 let passwd_options = {
                     silent: true,
                     output: process.stderr
                 };
-
-                if (_.has(model.settings, 'email')) {
-                    text = `Email [${model.settings.email}]:`;
-                    email_options.default = model.settings.email;
-                }
-
-                try {
-                    model.creds.email = await promptly.prompt(text, email_options);
-                } catch (e) {
-                    console.error(e);
-                    process.exit();
-                }
-
-                if (!model.creds.email || !model.creds.email.length) {
-                    model.creds.email = model.setttings.email;
-                } else {
-                    model.settings.email = model.creds.email;
-                    let file = process.env.HOME + '/.keys/settings.json';
-                    fs.writeFileSync(file, JSON.stringify(model.settings), {
-                        encoding: 'utf-8'
-                    });
-                }
-
+                // TODO for import without stored passwd, promptly can't read stdin b/c already been processed
                 model.creds.passwd = await promptly.prompt('Password: ', passwd_options);
             }
         }
@@ -568,29 +609,50 @@ let ask_creds = async(model) => {
     return Promise.resolve(model);
 };
 
-let import_env = async(model) => {
+let read_vars = (model, content) => {
+    let lines = content.split(/\r?\n/);
+    let vars = {};
+    lines.forEach(line => {
+        if (!line.match(/^\s?#/)) {
+            let m = line.match(/(?<k>\w+)=(?<v>.+)/);
+            if (m) {
+                vars[m.groups.k] = {
+                    value: m.groups.v,
+                    updated: moment().unix(),
+                    by: model.user.id
+                };
+            }
+        }
+    });
+    return vars;
+}
+
+let import_env = async (model) => {
+
     if (model && model.import) {
         let import_vars = {};
-        if (model.input) {
-            let lines = model.input.split('\n');
-            _.each(lines, (line) => {
-                if (line.replace(/\s/g, '').length) {
-                    let r_line = /([^=]+)=['"]?(.+)['"]?/;
-                    let match = r_line.exec(line);
-                    if (!match || match.length !== 3) {
-                        ui.info('Skipping line'.yellow, 'bad format: ' + line);
-                    }
-                    let key = match[1];
-                    let val = match[2];
-                    import_vars[key] = {
-                        value: val,
-                        updated: moment().unix(),
-                        by: model.user.id
-                    };
-                }
-            });
+        let vars = {};
+        if (!model.env_name) {
+            model.env_name = 'New-Environment-' + parseInt(Date.now() / 1000);
         }
+        if (model.input) {
+            import_vars = read_vars(model, model.input);
+        } else {
+            temp.track();
+            let header = `# Environment Name: ${model.env_name}\n`;
+            header += '# Environment Stage: dev\n';
+            header += '# Enter environment variables below, one per line\n';
+            header += '# NAME=VALUE\n\n';
 
+            let tmp = temp.path({suffix: '.env'});
+            fs.writeFileSync(tmp, header);
+            child_process.execSync(
+                `vim +5 ${tmp}`,
+                {stdio: 'inherit'}
+            );
+            let content = fs.readFileSync(tmp, 'utf8');
+            import_vars = read_vars(model, content);
+        }
         let body = {
             vars_ct: crypto.encrypt(model.user.org_keys[model.user.org], JSON.stringify(import_vars))
         };
@@ -598,31 +660,41 @@ let import_env = async(model) => {
             model.selected = uuid();
             body.id = model.selected;
             body.name = model.env_name;
+            body.stage = 'dev';
         } else {
             body.id = model.selected;
         }
-        let options = {
-            uri: model.client.endpoint + '/env/update',
-            jar: true,
-            json: body,
-            method: 'POST'
-        };
-        return request(options).then(() => {
+
+        if (model.settings.local) {
+            model.user.envs[body.id] = body;
+            model.user.envs[body.id].org = '1';
             let action = model.create_env ? 'Created' : 'Updated';
             ui.info(action.green, model.env_name.bold, `with ${_.size(import_vars)} variables from stdin`);
-            return Promise.resolve(null);
-        }).catch((err) => {
-            ui.error(err);
-            return Promise.resolve(null);
-        });
+            return cache_model(model);
+        } else {
+            let options = {
+                uri: model.client.endpoint + '/env/update',
+                jar: true,
+                json: body,
+                method: 'POST'
+            };
+            return request(options).then(() => {
+                let action = model.create_env ? 'Created' : 'Updated';
+                ui.info(action.green, model.env_name.bold, `with ${_.size(import_vars)} variables from stdin`);
+                return Promise.resolve(null);
+            }).catch((err) => {
+                ui.error(err);
+                return Promise.resolve(null);
+            });
+        }
     } else {
         return Promise.resolve(model);
     }
 };
 
-let update_stats = async(model) => {
+let update_stats = async (model) => {
 
-    if (model && !model.local && model.selected && !model.creds.token && model.source === 'keys') {
+    if (model && !model.local && !model.settings.local && model.selected && !model.creds.token && model.source === 'keys') {
 
         let body = {
             id: model.selected,
@@ -642,7 +714,7 @@ let update_stats = async(model) => {
     return Promise.resolve(model);
 };
 
-let ask_env = async(model) => {
+let ask_env = async (model) => {
 
     if (model) {
 
@@ -652,6 +724,15 @@ let ask_env = async(model) => {
             };
             model.selected = await ui.choose(model.user.envs);
             return Promise.resolve(model);
+        }
+
+        if (Object.keys(model.user.envs).length < 1 && !model.import) {
+            ui.info('No environments found, use -i or --import to add an environment to the repository');
+            ui.info();
+            ui.info('Examples:');
+            ui.info('    keys -i -e my_env_name');
+            ui.info('    cat .env | keys -i -e another_env_name');
+            process.exit(0);
         }
 
         if (model.token) {
@@ -669,6 +750,10 @@ let ask_env = async(model) => {
                     ui.info('NotFound'.yellow, model.env_name);
                 }
             }
+        } else if (model.import) {
+            if (model.import) {
+                model.create_env = true;
+            }
         }
 
         if (model.selected) {
@@ -681,13 +766,13 @@ let ask_env = async(model) => {
                 model.selected = await ui.choose(model.user.envs);
                 return Promise.resolve(model);
             } else {
-                if (model.create_env) {
-                    return Promise.resolve(model);
-                } else {
-                    ui.info('Use', '-e name'.yellow, 'with', '-i'.yellow, 'to specify an environment to create/update');
-                    ui.info('  with the lines from stdin (name=value)');
-                    return Promise.resolve(null);
-                }
+                return Promise.resolve(model);
+                // if (model.create_env) {
+                //     return Promise.resolve(model);
+                // } else {
+                //     ui.info('Use', '-e name'.yellow, 'with', '-i'.yellow, 'to specify an environment to create/update');
+                //     return Promise.resolve(null);
+                // }
             }
         }
     }
@@ -695,7 +780,7 @@ let ask_env = async(model) => {
 
 let execute = (model) => {
 
-    if (model) {
+    if (model && !model.import) {
         let env = {};
         let shell = false;
 
@@ -727,10 +812,10 @@ let execute = (model) => {
     return Promise.resolve();
 };
 
-let login = async(model) => {
+let login = async (model) => {
 
     if (model) {
-        if (model.local) {
+        if (model.local || model.settings.local) {
             return load_cache(model);
         } else if (model.source === 'keys') {
             let req = {
@@ -758,7 +843,7 @@ let login = async(model) => {
                 json: req,
                 method: 'POST'
             };
-            return request(options).then(async(body) => {
+            return request(options).then(async (body) => {
 
                 model.settings.endpoint = model.client.endpoint;
 
@@ -824,46 +909,55 @@ let login = async(model) => {
 
 let decrypt_model = (model) => {
 
-    if (model && model.source === 'keys') {
-        let passwd = _.has(model.creds, 'token') ? model.creds.token : model.creds.passwd;
-        // let org_key_ct = _.has(model, 'org_key_ct') ? model.org_key_ct : model.user.org_keys_ct[model.org.id];
+    try {
 
-        // let keypair, result;
+        if (model && model.source === 'keys') {
+            let passwd = _.has(model.creds, 'token') ? model.creds.token : model.creds.passwd;
+            // let org_key_ct = _.has(model, 'org_key_ct') ? model.org_key_ct : model.user.org_keys_ct[model.org.id];
 
-        if (_.has(model.creds, 'token')) {
-            // org_key = crypto.decrypt(passwd, JSON.stringify(org_key_ct));
-            model.user.org_keys = {};
-            _.each(model.user.org_keys_ct, (org_key_ct, orgid) => {
-                model.user.org_keys[orgid] = crypto.decrypt(passwd, org_key_ct);
-            });
-        } else {
+            // let keypair, result;
 
-            let keypair = cryptico.generateRSAKey(passwd, 1024);
-            // result = cryptico.decrypt(org_key_ct, keypair);
-            // model.user.org_key = result.plaintext;
-
-            if (_.has(model.user, 'org_keys_ct')) {
+            if (_.has(model.creds, 'token')) {
+                // org_key = crypto.decrypt(passwd, JSON.stringify(org_key_ct));
                 model.user.org_keys = {};
                 _.each(model.user.org_keys_ct, (org_key_ct, orgid) => {
-                    model.user.org_keys[orgid] = cryptico.decrypt(org_key_ct, keypair).plaintext;
+                    model.user.org_keys[orgid] = crypto.decrypt(passwd, org_key_ct);
+                });
+            } else {
+
+                let keypair = cryptico.generateRSAKey(passwd, 1024);
+                // result = cryptico.decrypt(org_key_ct, keypair);
+                // model.user.org_key = result.plaintext;
+
+                if (_.has(model.user, 'org_keys_ct')) {
+                    model.user.org_keys = {};
+                    _.each(model.user.org_keys_ct, (org_key_ct, orgid) => {
+                        model.user.org_keys[orgid] = cryptico.decrypt(org_key_ct, keypair).plaintext;
+                    });
+                }
+            }
+
+            if (_.has(model.user, 'envs') && Object.keys(model.user.envs).length > 0) {
+                _.each(model.user.envs, (env, id) => {
+                    if (model.token && (!_.has(model, 'selected') || !model.selected)) {
+                        model.selected = id;
+                    }
+                    if (env.vars_ct) {
+                        model.user.envs[id].vars = JSON.parse(crypto.decrypt(model.user.org_keys[env.org], env.vars_ct));
+                    }
                 });
             }
         }
 
-        _.each(model.user.envs, (env, id) => {
-            if (model.token && (!_.has(model, 'selected') || !model.selected)) {
-                model.selected = id;
-            }
-            if (env.vars_ct) {
-                model.user.envs[id].vars = JSON.parse(crypto.decrypt(model.user.org_keys[env.org], env.vars_ct));
-            }
-        });
+    }catch(e){
+         ui.info('AuthFailure'.red, 'Invalid password');
+         return Promise.resolve(null);
     }
 
     return Promise.resolve(model);
 };
 
-let specials = async(model) => {
+let specials = async (model) => {
 
     if (model) {
         let parts = _.chain(model.cmd).toLower().words().value();
@@ -901,7 +995,7 @@ let specials = async(model) => {
     return Promise.resolve(model);
 };
 
-let main = async() => {
+let main = async () => {
 
     model.spinner = ora('Initializing\n').start();
 

@@ -46,7 +46,7 @@ let ui = {
 
         let envs = _.groupBy(envs_all, 'stage');
 
-        let choices = {}
+        let choices = {};
         let i = 1;
         _.each(envs, (v, k) => {
             choices[k] = i;

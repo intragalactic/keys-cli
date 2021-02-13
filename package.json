@@ -15,7 +15,14 @@
     "bin": {
         "keys": "keys.js"
     },
-    "keywords": ["environment", "variables", "env", "vars", "cli", "security"],
+    "keywords": [
+        "environment",
+        "variables",
+        "env",
+        "vars",
+        "cli",
+        "security"
+    ],
     "author": "ehlo@keys.cm",
     "license": "GPL-3.0-only",
     "private": false,
@@ -50,6 +57,7 @@
         "request-promise": "^4.2.5",
         "sha3": "^2.1.1",
         "sjcl": "^1.0.8",
+        "temp": "^0.9.4",
         "uuid": "^7.0.2"
     }
 }
