@@ -38,7 +38,7 @@ let default_settings = {
 let model = {
     debug: false,
     client: {
-        version: '2.5.1'
+        version: '3.0.0'
     },
     args: [],
     cmd: [],
@@ -250,8 +250,11 @@ let handle_args = async (model) => {
                     last.token = true;
                 } else if (item === '-v' || item === '--verbose') {
                     ui.set_debug(true);
-                } else if (item === '-e' || item === '--environment') {
+                } else if (item === '-n' || item === '--name') {
                     last.environment = true;
+                } else if (item === '-e' || item === '--edit') {
+                   model.edit = true;
+                   model.import = true;
                 } else if (item === '-c' || item === '--clean') {
                     model.clean = true;
                 } else if (item === '-l' || item === '--local') {
@@ -352,11 +355,13 @@ let handle_args = async (model) => {
         }
 
         if (_.trim(model.cmd).length < 1 && !model.destination && !model.fresh && !model.import) {
-            ui.info('WARN'.yellow, 'No command was provided');
+            ui.info('WARN'.yellow, 'No command was provided.');
             ui.info('');
-            ui.info('Typical actions are:');
+            ui.info('Some Typical actions are:');
             ui.info('  keys [command]', '# run command with env vars loaded'.gray);
-            ui.info('  keys -d [platform]', '# push env vars to destination'.gray);
+            ui.info('  keys -i', '# create/import a new environment'.gray);
+            ui.info('  keys -e', '# edit an existing environment'.gray);
+            ui.info('  keys -d [platform]', '# push env vars to destination platform'.gray);
             ui.info('');
 
             process.exit(0);
@@ -610,77 +615,111 @@ let ask_creds = async (model) => {
 };
 
 let read_vars = (model, content) => {
+    let env = {
+        name: 'Unnamed',
+        stage: 'dev',
+        vars: {}
+    };
     let lines = content.split(/\r?\n/);
     let vars = {};
     lines.forEach(line => {
+
         if (!line.match(/^\s?#/)) {
             let m = line.match(/(?<k>\w+)=(?<v>.+)/);
             if (m) {
-                vars[m.groups.k] = {
+                env.vars[m.groups.k] = {
                     value: m.groups.v,
                     updated: moment().unix(),
                     by: model.user.id
                 };
             }
+        } else {
+            let m = line.match(/Environment Name: (?<name>.+)/);
+            if(m){
+                env.name = m.groups.name;
+            }else{
+                m = line.match(/Environment Stage: (?<stage>.+)/);
+                if(m){
+                    env.stage = m.groups.stage;
+                }
+            }
         }
     });
-    return vars;
+    return env;
 }
 
 let import_env = async (model) => {
 
     if (model && model.import) {
-        let import_vars = {};
-        let vars = {};
+        let env = {};
         if (!model.env_name) {
             model.env_name = 'New-Environment-' + parseInt(Date.now() / 1000);
         }
         if (model.input) {
-            import_vars = read_vars(model, model.input);
+            env = read_vars(model, model.input);
         } else {
+
+            let existing = '';
+            if ( Object.keys(model.user.envs).length < 1 ){
+                model.edit = false;
+                model.selected = null;
+            }
+            if ( model.edit && !model.selected ){
+                model.selected = await ui.choose(model.user.envs);
+                model.env_name = model.user.envs[model.selected].name;
+                let env = model.user.envs[model.selected];
+                _.each(env.vars, (v,k) => {
+                    existing += `${k}=${v.value}\n`;
+                });
+            }
+
             temp.track();
             let header = `# Environment Name: ${model.env_name}\n`;
             header += '# Environment Stage: dev\n';
             header += '# Enter environment variables below, one per line\n';
-            header += '# NAME=VALUE\n\n';
+            header += '# NAME=VALUE\n';
+            header += existing + '\n';
 
             let tmp = temp.path({suffix: '.env'});
             fs.writeFileSync(tmp, header);
+            let args = '';
+            let editor = process.env.EDITOR || 'vim';
+            if (editor === 'vim' || editor === 'vi'){
+                args = '+5';
+            }
             child_process.execSync(
-                `vim +5 ${tmp}`,
+                `${editor} ${args} ${tmp}`,
                 {stdio: 'inherit'}
             );
             let content = fs.readFileSync(tmp, 'utf8');
-            import_vars = read_vars(model, content);
+            if ( header === content ){
+                 ui.info('WARN'.yellow, 'No changes were made.');
+                 return Promise.resolve(null);
+            }
+            env = read_vars(model, content);
         }
-        let body = {
-            vars_ct: crypto.encrypt(model.user.org_keys[model.user.org], JSON.stringify(import_vars))
-        };
-        if (model.create_env) {
+        env.vars_ct = crypto.encrypt(model.user.org_keys[model.user.org], JSON.stringify(env.vars))
+        if (!model.selected) {
             model.selected = uuid();
-            body.id = model.selected;
-            body.name = model.env_name;
-            body.stage = 'dev';
-        } else {
-            body.id = model.selected;
         }
+        env.id = model.selected;
 
         if (model.settings.local) {
-            model.user.envs[body.id] = body;
-            model.user.envs[body.id].org = '1';
-            let action = model.create_env ? 'Created' : 'Updated';
-            ui.info(action.green, model.env_name.bold, `with ${_.size(import_vars)} variables from stdin`);
+            model.user.envs[env.id] = env;
+            model.user.envs[env.id].org = '1';
+            let action = model.edit ? 'Updated' : 'Created';
+            ui.info(action.green, env.name.bold, `with ${_.size(env.vars)} variables.`);
             return cache_model(model);
         } else {
             let options = {
                 uri: model.client.endpoint + '/env/update',
                 jar: true,
-                json: body,
+                json: env,
                 method: 'POST'
             };
             return request(options).then(() => {
                 let action = model.create_env ? 'Created' : 'Updated';
-                ui.info(action.green, model.env_name.bold, `with ${_.size(import_vars)} variables from stdin`);
+                ui.info(action.green, env.name.bold, `with ${_.size(env.vars)} variables.`);
                 return Promise.resolve(null);
             }).catch((err) => {
                 ui.error(err);
@@ -730,8 +769,8 @@ let ask_env = async (model) => {
             ui.info('No environments found, use -i or --import to add an environment to the repository');
             ui.info();
             ui.info('Examples:');
-            ui.info('    keys -i -e my_env_name');
-            ui.info('    cat .env | keys -i -e another_env_name');
+            ui.info('    keys -i');
+            ui.info('    cat .env | keys -i');
             process.exit(0);
         }
 
@@ -744,9 +783,7 @@ let ask_env = async (model) => {
             if (found) {
                 model.selected = found.id;
             } else {
-                if (model.import) {
-                    model.create_env = true;
-                } else {
+                if (!model.import && !model.edit) {
                     ui.info('NotFound'.yellow, model.env_name);
                 }
             }
@@ -951,6 +988,8 @@ let decrypt_model = (model) => {
 
     }catch(e){
          ui.info('AuthFailure'.red, 'Invalid password');
+         ui.info('Environment data cannot be decrypted without the password.'.grey);
+         ui.info('To create a new repository, use --reset'.grey);
          return Promise.resolve(null);
     }
 

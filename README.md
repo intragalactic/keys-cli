@@ -1,6 +1,12 @@
-## keys - keys.cm client
+## keys
 
-This is the keys core client, which can be installed with npm and provides the `keys` command line utility.
+`keys` is a command line tool to safely store and load sets of environment variables. The environments are encrypted-at-rest, and only decrypted at runtime.
+
+Prefix any command with `keys` to decrypt and load a specific environment. 
+
+### Remote repository
+
+(Optional)
 
 [https://keys.cm](https://keys.cm) is a repository that stores encrypted blobs of environment variables. You can store
 variable sets for your software in the repository, and fetch-decrypt-load them at runtime. This prevents your sensitive environment variables like API access keys from ever having to sit in plain text files on your systems and developer machines.
@@ -8,18 +14,10 @@ variable sets for your software in the repository, and fetch-decrypt-load them a
 The repository functions similarly to modern password managers, and keys.cm does not have access to your environment
 variables, they are decrypted locally after you fetch the blob. Don't lose your password!
 
+
 ### Prerequisites
 
-You should have an account at [https://keys.cm](https://keys.cm) if you want to interact with the repository.
-
-#### Linux Build Dependencies
-Before `npm install`, you may have to install `python2` and `libsecret`
-
-```bash
-sudo apt-get install libsecret-1-dev # Debian/Ubuntu
-sudo yum install libsecret-devel # Red Hat-based
-sudo pacman -S libsecret # Arch Linux
-```
+On first run, `keys` will ask you if you'd like to use local mode or sync with https://keys.cm
 
 ### Installing
 
@@ -27,6 +25,16 @@ Install the package with npm. This will provide a new command in your shell, cal
 
 ```
 npm install -g keys-cli
+```
+
+#### Linux Build Dependencies
+Before `npm install`, you may have to install `python2` and `libsecret` if you want your password to be cached in your OS keychain
+(recommended for sanity).
+
+```bash
+sudo apt-get install libsecret-1-dev # Debian/Ubuntu
+sudo yum install libsecret-devel # Red Hat-based
+sudo pacman -S libsecret # Arch Linux
 ```
 
 ### Usage
@@ -62,8 +70,14 @@ $ keys bin/rails server -e production -p 4000
 
 ### Options
 
-`-e | --environment environment-name`
-Specifies the environment to load, skipping the prompt which asks for it.
+`-i | --import`
+Import a new environment. You can use your text $EDITOR or pipe lines of KEY=Value into STDIN
+
+`-e | --edit`
+Edit an existing environment with your text $EDITOR.
+
+`-n | --name environment-name`
+Specifies the environment to load/edit, skipping the prompt which asks for it.
 
 `-v | --verbose`
 Enable verbose mode, printing debugging messages about what is going on.
@@ -92,9 +106,7 @@ keys -d heroku # copy environment from keys.cm to a Heroku app
 keys -s heroku -d pivotal # copy an environment from a Heroku app to a Pivotal Cloud Foundry app
 ```
 
-`-i | --import`
-Pipe lines of variables key=value into stdin to import variables to an environment specified by `-e`.
-*This will overwrite the environment*
+
 
 ```
 echo "VAR1=ABC\nVAR2=DEF" | keys -i -e myenv
