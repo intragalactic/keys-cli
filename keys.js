@@ -10,7 +10,7 @@ const promptly = require('promptly');
 const fs = require('fs');
 const _ = require('lodash');
 const exec_await = require('await-exec');
-const keytar = require('keytar');
+const keytar = require('keytar-pass');
 const get_stdin = require('get-stdin');
 const moment = require('moment');
 const uuid = require('uuid').v4;
@@ -95,9 +95,10 @@ let store_creds = (creds) => {
 let load_creds = async (model) => {
     if (model) {
         if (!model.token) {
-            if (model.settings.email || model.settings.local) {
+            if (model.settings.email) {
                 let creds = null;
                 try {
+                    console.log('bbq1');
                     creds = await keytar.findCredentials('keys.cm');
                 } catch (e) {
                     let platform = process.platform === 'darwin' ? 'OSX' : process.platform;
@@ -105,6 +106,8 @@ let load_creds = async (model) => {
                     ui.debug(e.message);
                 }
                 if (creds) {
+                     console.log('bbq2');
+                     console.log(creds);
                     let match = _.find(creds, {
                         'account': model.settings.email
                     });
@@ -574,6 +577,8 @@ let ask_creds = async (model) => {
                 }
             }
 
+            console.log(model.creds);
+
             if (!model.fresh && (!model.creds.email || !model.creds.passwd)) {
 
                 if (!model.settings.local) {
@@ -1040,9 +1045,58 @@ let specials = async (model) => {
     return Promise.resolve(model);
 };
 
+let init_pass = async () => {
+    console.log('what 0');
+    if (process.platform != 'win32' && process.platform != 'darwin') {
+         console.log('what 1');
+    ui.debug(`Detected current OS: ${process.platform}.  Initializing pass library for password storage.`);
+    await exec('pass', (err, stdout, stderr) => {
+         console.log('what 2');
+        if (stdout.startsWith('Password Store')) {
+             console.log('what 3');
+            ui.debug('Pass library already initialized.');
+        } else if (stdout.includes('Error: password store is empty. Try "pass init".')) {
+             console.log('what 4');
+            // initialize pass
+            exec(`cat >keygenInfo <<EOF
+                    %echo Generating a basic OpenPGP key
+                    %no-protection
+                    Key-Type: DSA
+                    Key-Length: 1024
+                    Subkey-Type: ELG-E
+                    Subkey-Length: 1024
+                    Name-Real: user
+                    Name-Comment: a user
+                    Name-Email: user@local
+                    Expire-Date: 0
+                    # Do a commit here, so that we can later print "done" :-)
+                    %commit
+                    %echo done
+                EOF`);
+            exec('gpg --batch --generate-key keygenInfo');
+            exec('pass init user@local', (error, stdout, stderr) => {
+                if (error) {
+                    ui.error(`Error initializing pass: ${error.message}`);
+                }
+                if (stderr) {
+                    ui.error(`Error output (stderr) while initializing pass: ${stderr}`);
+                }
+                ui.info(`pass init: output: ${stdout}`);
+            });
+
+        } else if (stdout.includes('No such file or directory')) {
+             console.log('what 5');
+            ui.info('WARN'.yellow, 'The pass library does not appear to be installed.  Try running','sudo apt install pass'.bold,'(or equivalent).');
+        }
+    });
+}
+}
+
 let main = async () => {
 
     model.spinner = ora('Initializing\n').start();
+
+    init_pass();
 
     load_config(model)
         .then(handle_args)
