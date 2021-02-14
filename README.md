@@ -1,6 +1,6 @@
 ## keys
 
-`keys` is a command line tool to safely store and load sets of environment variables. The environments are encrypted-at-rest, and only decrypted at runtime.
+`keys` is a command line tool to safely store and load sets of environment variables. The variables are encrypted-at-rest.
 
 Prefix any command with `keys` to decrypt and load a specific environment. 
 
@@ -13,9 +13,6 @@ variable sets for your software in the repository, and fetch-decrypt-load them a
 
 The repository functions similarly to modern password managers, and keys.cm does not have access to your environment
 variables, they are decrypted locally after you fetch the blob. Don't lose your password!
-
-
-### Prerequisites
 
 On first run, `keys` will ask you if you'd like to use local mode or sync with https://keys.cm
 
@@ -39,12 +36,12 @@ sudo pacman -S libsecret # Arch
 
 ### Usage
 
-Just prefix any command you want to run with `keys`. Environment variables will be downloaded, decrypted, and your
+Just prefix any command you want to run with `keys`. Environment variables will be loaded, decrypted, and your
 command will be executed, now having access to them.
 
 ```bash
 $ keys ./anything.sh -a 1 -b 2
-keys 2.5.1
+keys 3.0.0
 Loaded credentials from keychain
 AuthSuccess for user@example.com
 DEV                        TEST               PROD
@@ -82,13 +79,10 @@ Specifies the environment to load/edit, skipping the prompt which asks for it.
 `-v | --verbose`
 Enable verbose mode, printing debugging messages about what is going on.
 
-`-c | --clean`
+`-x | --exclusive`
 By default, keys will append environment variables to your current shell environment before running your command.
 This flag will run your command with _only_ the variables from the selected environment.
 
-`-l | --local`
-Load encrypted data from local cache (at ~/.keys/cache.json) instead of logging into the remote repository. In normal
-mode this cache is used as a fallback in case the remote repository is inaccessible.
 
 `-s | --source [platform]`
 Load environments from `platform` instead of keys.cm.
@@ -106,15 +100,9 @@ keys -d heroku # copy environment from keys.cm to a Heroku app
 keys -s heroku -d pivotal # copy an environment from a Heroku app to a Pivotal Cloud Foundry app
 ```
 
-
-
-```
-echo "VAR1=ABC\nVAR2=DEF" | keys -i -e myenv
-```
-
-```
-heroku config -s | keys -i -e myenv
-```
+`--local`
+Load encrypted data from local cache (at ~/.keys/cache.json) instead of logging into the remote repository. In normal
+mode this cache is used as a fallback in case the remote repository is inaccessible.
 
 `-t | --token`
 specifies that the KEYS_TOKEN variable in the local environment should be read for an access token for
@@ -125,7 +113,7 @@ KEYS_TOKEN=abc123 keys -t command
 ```
 
 `--reset`
-Reset credentials and settings from ~/.keys/settings.json
+Reset credentials and settings in ~/.keys.
 
 ### Access Tokens
 

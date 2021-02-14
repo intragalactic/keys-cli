@@ -83,7 +83,7 @@ let store_creds = (creds) => {
                 ui.debug('\nStored credentials in keychain');
             }).catch((e) => {
                 let platform = process.platform === 'darwin' ? 'OSX' : process.platform;
-                ui.error('\nWARN'.yellow, `Unable to store credentials in ${platform} keychain. [Press Enter to Continue]`);
+                ui.error('\nWARN'.yellow, `Unable to store credentials in ${platform} keychain.`);
                 ui.debug(e.message);
             });
         }
@@ -100,7 +100,8 @@ let load_creds = async (model) => {
                 try {
                     creds = await keytar.findCredentials('keys.cm');
                 } catch (e) {
-                    ui.info('WARN'.yellow, 'Unable to load credentials from keychain', 'Run with -v for more info.'.gray);
+                    let platform = process.platform === 'darwin' ? 'OSX' : process.platform;
+                    ui.info('WARN'.yellow, `Unable to load credentials from ${platform} keychain.`, 'Run with -v for more info.'.gray);
                     ui.debug(e.message);
                 }
                 if (creds) {
@@ -255,9 +256,9 @@ let handle_args = async (model) => {
                 } else if (item === '-e' || item === '--edit') {
                    model.edit = true;
                    model.import = true;
-                } else if (item === '-c' || item === '--clean') {
-                    model.clean = true;
-                } else if (item === '-l' || item === '--local') {
+                } else if (item === '-x' || item === '--exclusive') {
+                    model.exclusive = true;
+                } else if (item === '--local') {
                     model.local = true;
                 } else if (item === '-i' || item === '--import') {
                     model.import = true;
@@ -474,6 +475,8 @@ let ask_creds = async (model) => {
                         passwd = await promptly.prompt('Create Password: ', passwd_options);
                         confirm = await promptly.prompt('Confirm Password: ', passwd_options);
                     }
+                    model.settings.email = (process.env.USER || 'user') + '@local';
+                    model.creds.email =  model.settings.email;
                     model.creds.passwd = passwd;
                     let org_key = uuid();
                     let keypair = cryptico.generateRSAKey(passwd, 1024);
@@ -482,7 +485,7 @@ let ask_creds = async (model) => {
                     hash.update(passwd);
 
                     model.user = {
-                        email: null,
+                        email: model.settings.email,
                         name: process.env.USER || process.env.LOGNAME || 'local_user',
                         passwd_hash: hash.digest('hex'),
                         org: '1',
@@ -606,6 +609,7 @@ let ask_creds = async (model) => {
                     output: process.stderr
                 };
                 // TODO for import without stored passwd, promptly can't read stdin b/c already been processed
+                model.creds.email = model.settings.email;
                 model.creds.passwd = await promptly.prompt('Password: ', passwd_options);
             }
         }
@@ -821,7 +825,7 @@ let execute = (model) => {
         let env = {};
         let shell = false;
 
-        if (!model.clean) {
+        if (!model.exclusive) {
             env = _.clone(process.env);
             shell = true;
         }
@@ -902,7 +906,7 @@ let login = async (model) => {
                         _.merge(model, body);
                         model.settings.registered = true;
 
-                        store_creds(model.creds);
+                        // store_creds(model.creds);
                         return Promise.resolve(model);
 
                     }).catch(err => {
@@ -916,7 +920,7 @@ let login = async (model) => {
                     model.settings.registered = true;
                     _.merge(model, body);
                     cache_model(model);
-                    store_creds(model.creds);
+                    // store_creds(model.creds);
 
                     return Promise.resolve(model);
                 }
@@ -985,6 +989,8 @@ let decrypt_model = (model) => {
                 });
             }
         }
+
+        store_creds(model.creds);
 
     }catch(e){
          ui.info('AuthFailure'.red, 'Invalid password');
