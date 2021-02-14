@@ -36,28 +36,28 @@
         }
     },
     "devDependencies": {
-        "eslint": "^6.8.0",
-        "jest": "^25.5.4"
+        "eslint": "^7.20.0",
+        "jest": "^26.6.3"
     },
     "dependencies": {
         "await-exec": "^0.1.2",
-        "cli-progress": "^3.8.2",
+        "cli-progress": "^3.9.0",
         "colors": "^1.4.0",
         "columnify": "^1.5.4",
         "cryptico": "^1.0.2",
-        "get-stdin": "^7.0.0",
-        "keytar": "^5.4.0",
-        "lodash": "^4.17.15",
-        "moment": "^2.24.0",
-        "node-vault": "^0.9.15",
-        "ora": "^4.0.4",
-        "password-validator": "^5.0.3",
-        "promptly": "^3.0.3",
+        "get-stdin": "^8.0.0",
+        "keytar": "^7.3.0",
+        "lodash": "^4.17.20",
+        "moment": "^2.29.1",
+        "node-vault": "^0.9.21",
+        "ora": "^5.3.0",
+        "password-validator": "^5.1.1",
+        "promptly": "^3.2.0",
         "request": "^2.88.2",
         "request-promise": "^4.2.5",
-        "sha3": "^2.1.1",
+        "sha3": "^2.1.4",
         "sjcl": "^1.0.8",
         "temp": "^0.9.4",
-        "uuid": "^7.0.2"
+        "uuid": "^8.3.2"
     }
 }

@@ -32,9 +32,9 @@ Before `npm install`, you may have to install `python2` and `libsecret` if you w
 (recommended for sanity).
 
 ```bash
-sudo apt-get install libsecret-1-dev # Debian/Ubuntu
-sudo yum install libsecret-devel # Red Hat-based
-sudo pacman -S libsecret # Arch Linux
+sudo apt-get install libsecret-1-dev pass gnupg2 gnome-keyring # DEB
+sudo yum install libsecret-devel # RPM
+sudo pacman -S libsecret # Arch
 ```
 
 ### Usage
