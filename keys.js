@@ -19,18 +19,20 @@ const URL = require('url').URL;
 const ui = require('./ui');
 const liaison = require('./liaison/liaison');
 
+const tagline = "Keys stores encrypted sets of environment variables and loads them at runtime.";
+
 const {
     exec,
     spawn
 } = require('child_process');
-
 
 let default_settings = {
     default_environment: null,
     ask_everytime: false,
     self_update: false,
     registered: false,
-    endpoint: 'https://api.keys.cm'
+    endpoint: 'https://api.keys.intragalactic.io',
+    local: false
 };
 
 let model = {
@@ -67,16 +69,67 @@ let validURL = (s) => {
     }
 };
 
+let create_local_repo = (model, passwd) => {
+
+    let org_key = uuid();
+    let keypair = cryptico.generateRSAKey(passwd, 1024);
+    let public_key = cryptico.publicKeyString(keypair);
+    let hash = new SHA3(512);
+    hash.update(passwd);
+
+    let env_id = uuid();
+    let org_id = uuid()
+
+    model.user = {
+        id: uuid(),
+        email: null,
+        public_key: public_key,
+        envs: {},
+        org_keys_ct: {}
+    }
+
+    model.user.org_keys_ct[org_id] = cryptico.encrypt(org_key, public_key).cipher
+
+    let sample_vars = {
+        'AWS_ACCESS_KEY_ID': {
+            'value': 'abc123',
+            'updated': moment().unix(),
+        },
+        'AWS_SECRET_ACCESS_KEY': {
+            'value': 'xyz456',
+            'updated': moment().unix(),
+        },
+        'AWS_DEFAULT_REGION': {
+            'value': 'us-east-1',
+            'updated': moment().unix(),
+        }
+    };
+
+    model.user.envs[env_id] = {
+        id: env_id,
+        name: 'Sample Environment',
+        org: org_id,
+        stage: 'dev',
+        vars_ct: crypto.encrypt(org_key, JSON.stringify(sample_vars))
+    }
+
+    // let encrypted = crypto.encrypt(passwd, JSON.stringify(model.user.envs));
+
+    fs.writeFileSync(process.env.HOME + '/.keys/cache.json', JSON.stringify(model.user));
+    ui.debug('The userdata file has been saved.');
+    return Promise.resolve(model);
+}
+
 let unstore_creds = (model) => {
     if (model.settings.email) {
-        keytar.deletePassword('keys.cm', model.settings.email);
+        keytar.deletePassword('keys.intragalactic.io', model.settings.email);
     }
 };
 
 let store_creds = (creds) => {
     try {
         if (!model.creds.token) {
-            let p = keytar.setPassword('keys.cm', creds.email, creds.passwd);
+            let p = keytar.setPassword('keys.intragalactic.io', creds.email, creds.passwd);
             p.then(() => {
                 ui.debug('\nStored credentials in keychain');
             }).catch((e) => {
@@ -96,7 +149,7 @@ let load_creds = async(model) => {
             if (model.settings.email) {
                 let creds = null;
                 try {
-                    creds = await keytar.findCredentials('keys.cm');
+                    creds = await keytar.findCredentials('keys.intragalactic.io');
                 }catch(e){
                     ui.info('WARN'.yellow, 'Unable to load credentials from keychain', 'Run with -v for more info.'.gray);
                     ui.debug(e.message);
@@ -143,7 +196,7 @@ let print_intro = (model) => {
 
 let self_update = (model) => {
 
-    if (model) {
+    if (model && !model.local) {
         return request.get(model.client.endpoint + '/info').then((body) => {
 
             let info = JSON.parse(body);
@@ -192,8 +245,8 @@ let self_update = (model) => {
 
 let update_config = (model) => {
     if (model) {
-        let file = process.env.HOME + '/.keys/settings.json';
-        fs.writeFileSync(file, JSON.stringify(model.settings, null, '  '), {
+        let file = process.env.HOME + '/.keys/settings.yml';
+        fs.writeFileSync(file, JSON.stringify(model.settings), {
             encoding: 'utf-8'
         });
     }
@@ -282,10 +335,10 @@ let handle_args = async(model) => {
                 ui.debug(`Using destination ${item}`);
                 model.destination = liaison.get(item);
             } else if (last.endpoint) {
-                if (validURL(item)) {
+                if (validURL(item) || item == 'local') {
                     endpoint = item;
                 } else {
-                    ui.die('\nError'.red, '--endpoint requires a valid URL argument.');
+                    ui.die('\nError'.red, '--endpoint requires a valid URL argument, or "local".');
                 }
                 last.endpoint = false;
             } else {
@@ -298,11 +351,10 @@ let handle_args = async(model) => {
     });
 
     if (endpoint) {
-        if (model.source === 'keys') {
-            model.client.endpoint = endpoint;
-        } else {
-            model.source.endpoint = endpoint;
+        if(endpoint == 'local'){
+            model.local = true;
         }
+        model.client.endpoint = endpoint;
     }
 
     _.each(last, (v, k) => {
@@ -381,7 +433,7 @@ let load_config = (model) => {
 
     if (model) {
         let dir = process.env.HOME + '/.keys';
-        let file = dir + '/settings.json';
+        let file = dir + '/settings.yml';
 
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir);
@@ -408,6 +460,7 @@ let load_config = (model) => {
 };
 
 let host_info = async(model) => {
+
 
     if (model) {
         model.client.type = 'default';
@@ -439,9 +492,11 @@ let ask_creds = async(model) => {
 
             if (model.fresh) {
                 ui.info('');
+                ui.info(tagline);
+                ui.info('');
                 let ask = '[1] Login to an existing account\n';
-                ask += '[2] Create a repository on https://keys.cm\n';
-                // ask += '[3] Create a local repository in ~/.keys to store encrypted environments\n';
+                ask += '[2] Create a repository on https://keys.intragalactic.io\n';
+                ask += '[3] Create an encrypted local repository in ~/.keys\n';
                 ask += '\nChoose an option: ';
                 let register_options = {
                     output: process.stderr,
@@ -449,8 +504,28 @@ let ask_creds = async(model) => {
                 };
                 let answer = await promptly.prompt(ask, register_options);
                 if (answer === '3'){
-                    ui.info('Creating local repository is coming soon...'.grey);
-                     process.exit();
+                    ui.info('Creating new local repository in ~/.keys ...'.grey);
+                    model.settings.local = true;
+
+                    let passwd_options = {
+                        silent: true,
+                        output: process.stderr
+                    };
+
+                    ui.info('The data will be encrypted with a password.'.grey);
+
+                    let passwd = await promptly.prompt('Password: ', passwd_options);
+                    let confirm = await promptly.prompt('Confirm Password: ', passwd_options);
+
+                    if (passwd === confirm) {
+                        model.creds.passwd = passwd;
+                        model.settings.local = true;
+                        model.local = true;
+                        return create_local_repo(model, passwd);
+                    }else{
+                        ui.error('Passwords did not match');
+                        return Promise.resolve(null);
+                    }
                 }else if (answer === '2' ) {
 
                     ui.info('Creating new account...'.grey);
@@ -523,7 +598,7 @@ let ask_creds = async(model) => {
 
                 } else {
                     model.fresh = false;
-                    ui.info('Log into existing account at https://keys.cm ...'.grey);
+                    ui.info('Log into existing account at https://keys.intragalactic.io ...'.grey);
                 }
             }
 
@@ -679,6 +754,8 @@ let ask_env = async(model) => {
         } else {
             if (!model.import) {
                 model.selected = await ui.choose(model.user.envs);
+                console.log('hello');
+                console.log(model.selected);
                 return Promise.resolve(model);
             } else {
                 if (model.create_env) {
@@ -867,6 +944,7 @@ let specials = async(model) => {
 
     if (model) {
         let parts = _.chain(model.cmd).toLower().words().value();
+        console.log(model.user.envs);
         let vars = model.user.envs[model.selected].vars;
 
         if (parts.length && parts[0] === 'docker') {
@@ -879,7 +957,6 @@ let specials = async(model) => {
         if (model.source !== 'keys') {
             model.user.envs[model.selected].vars = await model.source.env(model.selected);
         }
-
 
         if (model.destination) {
             ui.info(`\nChoose the ${model.destination.get_name()} ${model.destination.get_env_name()} to push ${model.user.envs[model.selected].name} (${_.keys(model.user.envs[model.selected].vars).length} vars) to:`.green);

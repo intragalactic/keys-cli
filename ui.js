@@ -76,6 +76,7 @@ let ui = {
         ui.info();
         text = message ? message : 'Load Environment #: ';
         let env_index = await promptly.prompt(text, { output: process.stderr });
+
         if (env_index > 0 && _.keys(env_choice).length >= env_index) {
             return env_choice[env_index];
             // return Promise.resolve(model);
